@@ -57,68 +57,89 @@ export function DashboardShell({
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
 
-  const metricCards = [
-    {
-      label: "Gross Revenue",
-      value: view.metrics.grossRevenue,
-      format: "currency" as const,
-      icon: <Wallet className="h-5 w-5" />,
-    },
-    {
-      label: "Net Payout",
-      value: view.metrics.netPayout,
-      format: "currency" as const,
-      icon: <TrendingUp className="h-5 w-5" />,
-    },
-    {
-      label: "Total Expenses",
-      value: view.metrics.totalExpenses,
-      format: "currency" as const,
-      icon: <ReceiptText className="h-5 w-5" />,
-    },
-    {
-      label: "Net Profit",
-      value: view.metrics.netProfit,
-      format: "currency" as const,
-      icon: <LayoutDashboard className="h-5 w-5" />,
-    },
-    {
-      label: "Profit Margin",
-      value: view.metrics.profitMargin,
-      format: "percent" as const,
-      icon: <Percent className="h-5 w-5" />,
-    },
-    {
-      label: "Total Bookings",
-      value: view.metrics.bookingsCount,
-      format: "number" as const,
-      icon: <CalendarDays className="h-5 w-5" />,
-    },
-    {
-      label: "Nights Booked",
-      value: view.metrics.nightsBooked,
-      format: "number" as const,
-      icon: <CalendarDays className="h-5 w-5" />,
-    },
-    {
-      label: "ADR",
-      value: view.metrics.adr,
-      format: "currency" as const,
-      icon: <BarChart3 className="h-5 w-5" />,
-    },
-    {
-      label: "Occupancy Rate",
-      value: view.metrics.occupancyRate,
-      format: "percent" as const,
-      icon: <LayoutDashboard className="h-5 w-5" />,
-    },
-    {
-      label: "RevPAR",
-      value: view.metrics.revPar,
-      format: "currency" as const,
-      icon: <TrendingUp className="h-5 w-5" />,
-    },
-  ];
+  const metricCards = view.mixedCurrencyMode
+    ? [
+        {
+          label: "Markets in View",
+          value: view.marketBreakdown.length,
+          format: "number" as const,
+          icon: <LayoutDashboard className="h-5 w-5" />,
+        },
+        {
+          label: "Total Bookings",
+          value: view.metrics.bookingsCount,
+          format: "number" as const,
+          icon: <CalendarDays className="h-5 w-5" />,
+        },
+        {
+          label: "Nights Booked",
+          value: view.metrics.nightsBooked,
+          format: "number" as const,
+          icon: <CalendarDays className="h-5 w-5" />,
+        },
+      ]
+    : [
+        {
+          label: "Gross Revenue",
+          value: view.metrics.grossRevenue,
+          format: "currency" as const,
+          icon: <Wallet className="h-5 w-5" />,
+        },
+        {
+          label: "Net Payout",
+          value: view.metrics.netPayout,
+          format: "currency" as const,
+          icon: <TrendingUp className="h-5 w-5" />,
+        },
+        {
+          label: "Total Expenses",
+          value: view.metrics.totalExpenses,
+          format: "currency" as const,
+          icon: <ReceiptText className="h-5 w-5" />,
+        },
+        {
+          label: "Net Profit",
+          value: view.metrics.netProfit,
+          format: "currency" as const,
+          icon: <LayoutDashboard className="h-5 w-5" />,
+        },
+        {
+          label: "Profit Margin",
+          value: view.metrics.profitMargin,
+          format: "percent" as const,
+          icon: <Percent className="h-5 w-5" />,
+        },
+        {
+          label: "Total Bookings",
+          value: view.metrics.bookingsCount,
+          format: "number" as const,
+          icon: <CalendarDays className="h-5 w-5" />,
+        },
+        {
+          label: "Nights Booked",
+          value: view.metrics.nightsBooked,
+          format: "number" as const,
+          icon: <CalendarDays className="h-5 w-5" />,
+        },
+        {
+          label: "ADR",
+          value: view.metrics.adr,
+          format: "currency" as const,
+          icon: <BarChart3 className="h-5 w-5" />,
+        },
+        {
+          label: "Occupancy Rate",
+          value: view.metrics.occupancyRate,
+          format: "percent" as const,
+          icon: <LayoutDashboard className="h-5 w-5" />,
+        },
+        {
+          label: "RevPAR",
+          value: view.metrics.revPar,
+          format: "currency" as const,
+          icon: <TrendingUp className="h-5 w-5" />,
+        },
+      ];
 
   return (
     <>
@@ -165,13 +186,13 @@ export function DashboardShell({
 
           {view.mixedCurrencyMode ? (
             <div className="workspace-soft-card rounded-[22px] px-4 py-3 text-sm text-[var(--workspace-muted)]">
-              Totals currently mix several countries and are shown in your primary reporting market. Switch to{" "}
-              {view.availableCountries.map((countryCode) => getMarketDefinition(countryCode).shortLabel).join(", ")}{" "}
-              for single-currency reporting.
+              `All markets` now behaves as a portfolio view. Hostlyx will not fake one converted total across{" "}
+              {view.availableCountries.map((countryCode) => getMarketDefinition(countryCode).shortLabel).join(", ")}.{" "}
+              Select one market for exact single-currency KPIs and charts.
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className={`grid gap-4 ${view.mixedCurrencyMode ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-5"}`}>
             {metricCards.map((card) => (
               <MetricCard
                 key={card.label}
@@ -184,12 +205,82 @@ export function DashboardShell({
             ))}
           </div>
 
+          {view.mixedCurrencyMode ? (
+            <SectionCard
+              title="Portfolio by Market"
+              subtitle="Each market keeps its own real currency without FX conversion."
+            >
+              <div className="grid gap-4 xl:grid-cols-3">
+                {view.marketBreakdown.map((market) => {
+                  const marketMeta = getMarketDefinition(market.countryCode);
+
+                  return (
+                    <article
+                      key={market.countryCode}
+                      className="workspace-soft-card rounded-[22px] p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--workspace-text)]">
+                            {marketMeta.countryName}
+                          </p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            {market.currencyCode}
+                          </p>
+                        </div>
+                        <div className="workspace-icon-chip rounded-2xl p-2.5">
+                          <Wallet className="h-4 w-4" />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            Revenue
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                            {formatCurrency(market.revenue, false, market.currencyCode)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            Profit
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                            {formatCurrency(market.profit, false, market.currencyCode)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            Bookings
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                            {formatNumber(market.bookings)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            Nights
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                            {formatNumber(market.nights)}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <ChartsPanel
             revenueByMonth={view.revenueByMonth}
             profitByMonth={view.profitByMonth}
             expensesByCategory={view.expensesByCategory}
             revenueByChannel={view.revenueByChannel}
             currencyCode={currencyCode}
+            mixedCurrencyMode={view.mixedCurrencyMode}
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">

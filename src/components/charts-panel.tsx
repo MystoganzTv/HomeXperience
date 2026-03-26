@@ -53,13 +53,36 @@ export function ChartsPanel({
   expensesByCategory,
   revenueByChannel,
   currencyCode,
+  mixedCurrencyMode = false,
 }: {
   revenueByMonth: MonthlyPoint[];
   profitByMonth: MonthlyPoint[];
   expensesByCategory: CategoryPoint[];
   revenueByChannel: ChannelPoint[];
   currencyCode: CurrencyCode;
+  mixedCurrencyMode?: boolean;
 }) {
+  if (mixedCurrencyMode) {
+    return (
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard
+          title="Amount-based charts paused"
+          subtitle="Cross-market view combines properties from different currencies."
+          className="min-w-0"
+        >
+          <EmptyChartState label="Choose one market to unlock revenue, profit, expense, and channel amount charts." />
+        </SectionCard>
+        <SectionCard
+          title="FX conversion"
+          subtitle="Consolidated amount charts need a real currency conversion layer."
+          className="min-w-0"
+        >
+          <EmptyChartState label="For now, Hostlyx keeps All markets as a portfolio view instead of guessing a converted total." />
+        </SectionCard>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       <SectionCard

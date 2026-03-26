@@ -108,6 +108,16 @@ export type DashboardView = {
   filters: DashboardFilters;
   displayCurrencyCode: CurrencyCode;
   mixedCurrencyMode: boolean;
+  marketBreakdown: Array<{
+    countryCode: CountryCode;
+    currencyCode: CurrencyCode;
+    revenue: number;
+    payout: number;
+    expenses: number;
+    profit: number;
+    bookings: number;
+    nights: number;
+  }>;
   metrics: {
     grossRevenue: number;
     netPayout: number;

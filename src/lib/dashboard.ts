@@ -303,6 +303,72 @@ export function buildDashboardView({
     });
   }
 
+  const marketBreakdownMap = new Map<
+    CountryCode,
+    {
+      revenue: number;
+      payout: number;
+      expenses: number;
+      profit: number;
+      bookings: number;
+      nights: number;
+    }
+  >();
+
+  for (const booking of filteredBookings) {
+    const countryCode = resolveRecordCountryCode(
+      booking.propertyName,
+      propertyCountryMap,
+      fallbackCountryCode,
+    );
+    const current = marketBreakdownMap.get(countryCode) ?? {
+      revenue: 0,
+      payout: 0,
+      expenses: 0,
+      profit: 0,
+      bookings: 0,
+      nights: 0,
+    };
+
+    current.revenue += booking.totalRevenue;
+    current.payout += booking.payout;
+    current.bookings += 1;
+    current.nights += booking.nights;
+    marketBreakdownMap.set(countryCode, current);
+  }
+
+  for (const expense of filteredExpenses) {
+    const countryCode = resolveRecordCountryCode(
+      expense.propertyName,
+      propertyCountryMap,
+      fallbackCountryCode,
+    );
+    const current = marketBreakdownMap.get(countryCode) ?? {
+      revenue: 0,
+      payout: 0,
+      expenses: 0,
+      profit: 0,
+      bookings: 0,
+      nights: 0,
+    };
+
+    current.expenses += expense.amount;
+    marketBreakdownMap.set(countryCode, current);
+  }
+
+  const marketBreakdown = Array.from(marketBreakdownMap.entries())
+    .map(([countryCode, value]) => ({
+      countryCode,
+      currencyCode: getCurrencyForCountry(countryCode),
+      revenue: value.revenue,
+      payout: value.payout,
+      expenses: value.expenses,
+      profit: value.payout - value.expenses,
+      bookings: value.bookings,
+      nights: value.nights,
+    }))
+    .sort((left, right) => right.revenue - left.revenue);
+
   const displayCountryCode =
     filters.countryCode === "all" ? fallbackCountryCode : filters.countryCode;
 
@@ -313,6 +379,7 @@ export function buildDashboardView({
     filters,
     displayCurrencyCode: getCurrencyForCountry(displayCountryCode),
     mixedCurrencyMode: filters.countryCode === "all" && availableCountries.length > 1,
+    marketBreakdown,
     metrics: {
       grossRevenue,
       netPayout,
