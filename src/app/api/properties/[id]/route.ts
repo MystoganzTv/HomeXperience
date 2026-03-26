@@ -48,7 +48,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -64,13 +64,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid property id." }, { status: 400 });
     }
 
-    await deletePropertyDefinition({
+    const { searchParams } = new URL(request.url);
+    const deleteLinkedData = searchParams.get("deleteLinkedData") === "true";
+
+    const result = await deletePropertyDefinition({
       ownerEmail,
       propertyId,
+      deleteLinkedData,
     });
 
     return NextResponse.json({
-      message: "Property deleted successfully.",
+      message:
+        result.deletedLinkedData
+          ? result.removedLastProperty
+            ? `Deleted ${result.deletedPropertyName} and removed ${result.deletedImportsCount} imports, ${result.deletedBookingsCount} bookings, and ${result.deletedExpensesCount} expenses. No properties remain in this workspace.`
+            : `Deleted ${result.deletedPropertyName} and removed ${result.deletedImportsCount} imports, ${result.deletedBookingsCount} bookings, and ${result.deletedExpensesCount} expenses linked to it.`
+          : "Property deleted successfully.",
     });
   } catch (error) {
     return NextResponse.json(

@@ -40,7 +40,7 @@ export function WorkspaceHeader({
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300">
                 {latestImport
-                  ? `Last import ${formatDateLabel(latestImport.importedAt.slice(0, 10))}`
+                  ? `${latestImport.propertyName} • ${formatDateLabel(latestImport.importedAt.slice(0, 10))}`
                   : "No imports yet"}
               </span>
             </div>

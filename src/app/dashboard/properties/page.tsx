@@ -7,6 +7,7 @@ import { getAuthSession } from "@/lib/auth";
 import {
   getBookings,
   getExpenses,
+  getImportSummaries,
   getLatestImport,
   getPropertyDefinitions,
   getUserSettings,
@@ -24,9 +25,10 @@ export default async function PropertiesPage() {
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
-  const [bookings, expenses, latestImport, userSettings, propertyDefinitions] = await Promise.all([
+  const [bookings, expenses, importSummaries, latestImport, userSettings, propertyDefinitions] = await Promise.all([
     getBookings(ownerEmail),
     getExpenses(ownerEmail),
+    getImportSummaries(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
     getPropertyDefinitions(ownerEmail),
@@ -40,6 +42,8 @@ export default async function PropertiesPage() {
       expenses: number;
       revenue: number;
       payout: number;
+      importsCount: number;
+      lastImportFileName: string;
     }
   >();
 
@@ -50,6 +54,8 @@ export default async function PropertiesPage() {
       expenses: 0,
       revenue: 0,
       payout: 0,
+      importsCount: 0,
+      lastImportFileName: "",
     };
 
     if (booking.unitName) {
@@ -69,6 +75,8 @@ export default async function PropertiesPage() {
       expenses: 0,
       revenue: 0,
       payout: 0,
+      importsCount: 0,
+      lastImportFileName: "",
     };
 
     if (expense.unitName) {
@@ -77,6 +85,24 @@ export default async function PropertiesPage() {
 
     current.expenses += expense.amount;
     propertyMap.set(expense.propertyName, current);
+  }
+
+  for (const importSummary of importSummaries) {
+    const current = propertyMap.get(importSummary.propertyName) ?? {
+      units: new Set<string>(),
+      bookings: 0,
+      expenses: 0,
+      revenue: 0,
+      payout: 0,
+      importsCount: 0,
+      lastImportFileName: "",
+    };
+
+    current.importsCount += 1;
+    if (!current.lastImportFileName) {
+      current.lastImportFileName = importSummary.fileName;
+    }
+    propertyMap.set(importSummary.propertyName, current);
   }
 
   const properties = Array.from(propertyMap.entries()).map(([name, value]) => ({
@@ -90,6 +116,8 @@ export default async function PropertiesPage() {
     payout: value.payout,
     expenses: value.expenses,
     profit: value.payout - value.expenses,
+    importsCount: value.importsCount,
+    lastImportFileName: value.lastImportFileName,
   }));
 
   for (const propertyDefinition of propertyDefinitions) {
@@ -103,6 +131,8 @@ export default async function PropertiesPage() {
         payout: 0,
         expenses: 0,
         profit: 0,
+        importsCount: 0,
+        lastImportFileName: "",
       });
     }
   }

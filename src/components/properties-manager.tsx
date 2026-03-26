@@ -13,6 +13,8 @@ type PropertySummary = {
   name: string;
   countryCode: CountryCode;
   units: string[];
+  importsCount: number;
+  lastImportFileName: string;
   bookings: number;
   expenses: number;
   payout: number;
@@ -209,9 +211,12 @@ export function PropertiesManager({
     startTransition(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/properties/${propertyToDelete.id}`, {
+          const response = await fetch(
+            `/api/properties/${propertyToDelete.id}?deleteLinkedData=true`,
+            {
             method: "DELETE",
-          });
+            },
+          );
           const payload = (await response.json()) as { error?: string; message?: string };
 
           if (!response.ok) {
@@ -412,6 +417,11 @@ export function PropertiesManager({
                       ? ` • ${formatNumber(summary.units.length)} saved units`
                       : " • No units yet"}
                   </p>
+                  {summary.lastImportFileName ? (
+                    <p className="mt-1 text-xs text-[var(--workspace-muted)]">
+                      Latest workbook: {summary.lastImportFileName}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="workspace-icon-chip rounded-2xl p-3">
                   <Layers3 className="h-5 w-5" />
@@ -440,6 +450,12 @@ export function PropertiesManager({
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="workspace-soft-card rounded-2xl px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Imports</p>
+                  <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
+                    {formatNumber(summary.importsCount)}
+                  </p>
+                </div>
                 <div className="workspace-soft-card rounded-2xl px-4 py-3">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bookings</p>
                   <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
@@ -591,12 +607,22 @@ export function PropertiesManager({
         {propertyToDelete ? (
           <div className="space-y-5">
             <div className="rounded-[22px] border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-700">
-              {propertyToDelete.bookings > 0 || propertyToDelete.expenses > 0
-                ? "This property still has linked bookings or expenses. Move or delete those records first."
-                : "This will delete the property and any saved units under it."}
+              {properties.length === 1
+                ? "This is your last property. Deleting it will also erase every linked import, booking, and expense, and the rest of Hostlyx will stay locked until you create a new property."
+                : propertyToDelete.bookings > 0 ||
+                    propertyToDelete.expenses > 0 ||
+                    propertyToDelete.importsCount > 0
+                  ? "This property has linked workbook imports and accounting data. If you continue, Hostlyx will permanently delete everything tied to this property."
+                  : "This will delete the property and any saved units under it."}
             </div>
 
-            <div className="workspace-soft-card grid gap-3 rounded-[22px] p-4 sm:grid-cols-3">
+            <div className="workspace-soft-card grid gap-3 rounded-[22px] p-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Imports</p>
+                <p className="mt-1 text-sm text-[var(--workspace-text)]">
+                  {formatNumber(propertyToDelete.importsCount)}
+                </p>
+              </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Bookings</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
@@ -621,6 +647,12 @@ export function PropertiesManager({
               </div>
             </div>
 
+            {propertyToDelete.lastImportFileName ? (
+              <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
+                Last linked workbook: <span className="font-medium text-[var(--workspace-text)]">{propertyToDelete.lastImportFileName}</span>
+              </div>
+            ) : null}
+
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -632,10 +664,15 @@ export function PropertiesManager({
               <button
                 type="button"
                 onClick={confirmDeleteProperty}
-                disabled={isPending || propertyToDelete.bookings > 0 || propertyToDelete.expenses > 0}
                 className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isPending ? "Deleting property..." : "Delete property"}
+                {isPending
+                  ? "Deleting property..."
+                  : propertyToDelete.importsCount > 0 ||
+                      propertyToDelete.bookings > 0 ||
+                      propertyToDelete.expenses > 0
+                    ? "Delete property and linked data"
+                    : "Delete property"}
               </button>
             </div>
           </div>

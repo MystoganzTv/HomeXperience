@@ -80,9 +80,11 @@ export function WorkspaceShell({
 
   return (
     <main className="min-h-screen bg-[var(--workspace-bg)] px-4 py-4 sm:px-6 xl:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-[1680px] flex-col gap-4 lg:flex-row">
-        <aside className={`flex w-full flex-col gap-5 rounded-[30px] border border-[var(--workspace-sidebar-border)] bg-[var(--workspace-sidebar)] p-5 shadow-[0_20px_40px_rgba(15,23,42,0.16)] lg:min-h-[calc(100vh-2rem)] lg:shrink-0 ${isCollapsed ? "lg:w-[96px]" : "lg:w-[272px]"}`}>
-          <div className="space-y-5">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 lg:flex-row lg:items-start">
+        <aside
+          className={`flex w-full flex-col gap-5 rounded-[30px] border border-[var(--workspace-sidebar-border)] bg-[var(--workspace-sidebar)] p-5 shadow-[0_20px_40px_rgba(15,23,42,0.16)] lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:shrink-0 lg:self-start ${isCollapsed ? "lg:w-[96px]" : "lg:w-[272px]"}`}
+        >
+          <div className="flex min-h-0 flex-1 flex-col">
             <div className="border-b border-white/8 pb-5">
               <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between"} gap-3`}>
                 <BrandLogo href="/dashboard" compact hideWordmark={isCollapsed} />
@@ -126,8 +128,9 @@ export function WorkspaceShell({
                 );
               })}
             </nav>
+
             {!isCollapsed ? (
-              <div className="space-y-3 border-t border-white/8 pt-5">
+              <div className="mt-auto space-y-3 border-t border-white/8 pt-5">
                 <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-[var(--workspace-sidebar-muted)]">
                     Last import
@@ -137,7 +140,7 @@ export function WorkspaceShell({
                   </p>
                   <p className="mt-1 text-xs text-[var(--workspace-sidebar-muted)]">
                     {latestImport
-                      ? formatDateLabel(latestImport.importedAt.slice(0, 10))
+                      ? `${latestImport.propertyName} • ${formatDateLabel(latestImport.importedAt.slice(0, 10))}`
                       : "Upload your first file to start"}
                   </p>
                 </div>
@@ -154,7 +157,7 @@ export function WorkspaceShell({
             ) : null}
           </div>
 
-          <div className="mt-auto hidden lg:block">
+          <div className="hidden lg:block">
             <div className={`flex ${isCollapsed ? "justify-center" : "justify-start"}`}>
               {isCollapsed ? (
                 <SignOutButton

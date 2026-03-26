@@ -41,6 +41,7 @@ export type ExpenseRecord = {
 export type ImportSummary = {
   id: number;
   fileName: string;
+  propertyName: string;
   source: ImportSource;
   importedAt: string;
   bookingsCount: number;

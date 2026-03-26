@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     const result = await appendImportData({
       ownerEmail,
       fileName: file.name,
+      propertyName: targetPropertyName,
       source: "upload",
       bookings: bookings.map((booking) => ({
         ...booking,

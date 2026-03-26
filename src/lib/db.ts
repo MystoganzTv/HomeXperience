@@ -153,6 +153,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_email TEXT NOT NULL DEFAULT 'legacy',
       file_name TEXT NOT NULL,
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
       source TEXT NOT NULL,
       imported_at TEXT NOT NULL,
       bookings_count INTEGER NOT NULL,
@@ -232,6 +233,34 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
   if (!hasColumn(db, "imports", "owner_email")) {
     db.exec("ALTER TABLE imports ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
   }
+
+  if (!hasColumn(db, "imports", "property_name")) {
+    db.exec("ALTER TABLE imports ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  db.exec(`
+    UPDATE imports
+    SET property_name = COALESCE(
+      (
+        SELECT bookings.property_name
+        FROM bookings
+        WHERE bookings.import_id = imports.id
+          AND bookings.owner_email = imports.owner_email
+          AND bookings.property_name <> ''
+        LIMIT 1
+      ),
+      (
+        SELECT expenses.property_name
+        FROM expenses
+        WHERE expenses.import_id = imports.id
+          AND expenses.owner_email = imports.owner_email
+          AND expenses.property_name <> ''
+        LIMIT 1
+      ),
+      property_name
+    )
+    WHERE property_name = 'Default Property'
+  `);
 
   if (!hasColumn(db, "bookings", "owner_email")) {
     db.exec("ALTER TABLE bookings ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
@@ -313,6 +342,7 @@ async function initializePostgresSchema() {
           id BIGSERIAL PRIMARY KEY,
           owner_email TEXT NOT NULL,
           file_name TEXT NOT NULL,
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
           source TEXT NOT NULL,
           imported_at TIMESTAMPTZ NOT NULL,
           bookings_count INTEGER NOT NULL,
@@ -390,6 +420,33 @@ async function initializePostgresSchema() {
       `);
 
       await pool.query(`
+        ALTER TABLE imports
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        UPDATE imports
+        SET property_name = COALESCE(
+          (
+            SELECT bookings.property_name
+            FROM bookings
+            WHERE bookings.import_id = imports.id
+              AND bookings.owner_email = imports.owner_email
+              AND bookings.property_name <> ''
+            LIMIT 1
+          ),
+          (
+            SELECT expenses.property_name
+            FROM expenses
+            WHERE expenses.import_id = imports.id
+              AND expenses.owner_email = imports.owner_email
+              AND expenses.property_name <> ''
+            LIMIT 1
+          ),
+          imports.property_name
+        )
+        WHERE imports.property_name = 'Default Property'
+      `);
+      await pool.query(`
         ALTER TABLE user_settings
         ADD COLUMN IF NOT EXISTS primary_country_code TEXT NOT NULL DEFAULT 'US'
       `);
@@ -439,6 +496,8 @@ function mapImportSummary(row: Record<string, unknown>): ImportSummary {
   return {
     id: Number(getRowValue(row, "id")),
     fileName: String(getRowValue(row, "fileName", "filename")),
+    propertyName:
+      String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
     source: String(getRowValue(row, "source")) as ImportSource,
     importedAt:
       importedAt instanceof Date
@@ -503,6 +562,7 @@ function cloneImportSummary(importSummary: StoredImport): ImportSummary {
   return {
     id: importSummary.id,
     fileName: importSummary.fileName,
+    propertyName: importSummary.propertyName,
     source: importSummary.source,
     importedAt: importSummary.importedAt,
     bookingsCount: importSummary.bookingsCount,
@@ -634,12 +694,14 @@ type ImportDataResult = {
 export async function appendImportData({
   ownerEmail,
   fileName,
+  propertyName,
   source,
   bookings,
   expenses,
 }: {
   ownerEmail: string;
   fileName: string;
+  propertyName: string;
   source: ImportSource;
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
@@ -725,13 +787,14 @@ export async function appendImportData({
 
       const importResult = await client.query(
         `
-          INSERT INTO imports (owner_email, file_name, source, imported_at, bookings_count, expenses_count)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO imports (owner_email, file_name, property_name, source, imported_at, bookings_count, expenses_count)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
           RETURNING id
         `,
         [
           normalizedEmail,
           fileName,
+          propertyName,
           source,
           importedAt,
           freshBookings.length,
@@ -856,6 +919,7 @@ export async function appendImportData({
       id: importId,
       ownerEmail: normalizedEmail,
       fileName,
+      propertyName,
       source,
       importedAt,
       bookingsCount: freshBookings.length,
@@ -966,13 +1030,14 @@ export async function appendImportData({
     const result = db
       .prepare(
         `
-          INSERT INTO imports (owner_email, file_name, source, imported_at, bookings_count, expenses_count)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO imports (owner_email, file_name, property_name, source, imported_at, bookings_count, expenses_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
         normalizedEmail,
         fileName,
+        propertyName,
         source,
         importedAt,
         freshBookings.length,
@@ -1061,6 +1126,7 @@ export async function getLatestImport(ownerEmail: string): Promise<ImportSummary
         SELECT
           id,
           file_name AS fileName,
+          property_name AS propertyName,
           source,
           imported_at AS importedAt,
           bookings_count AS bookingsCount,
@@ -1092,6 +1158,7 @@ export async function getLatestImport(ownerEmail: string): Promise<ImportSummary
         SELECT
           id,
           file_name AS fileName,
+          property_name AS propertyName,
           source,
           imported_at AS importedAt,
           bookings_count AS bookingsCount,
@@ -1105,6 +1172,61 @@ export async function getLatestImport(ownerEmail: string): Promise<ImportSummary
     .get(normalizedEmail) as Record<string, unknown> | undefined;
 
   return row ? mapImportSummary(row) : null;
+}
+
+export async function getImportSummaries(ownerEmail: string): Promise<ImportSummary[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          file_name AS fileName,
+          property_name AS propertyName,
+          source,
+          imported_at AS importedAt,
+          bookings_count AS bookingsCount,
+          expenses_count AS expensesCount
+        FROM imports
+        WHERE owner_email = $1
+        ORDER BY imported_at DESC
+      `,
+      [normalizedEmail],
+    );
+
+    return result.rows.map((row) => mapImportSummary(row as Record<string, unknown>));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    return store.imports
+      .filter((entry) => entry.ownerEmail === normalizedEmail)
+      .sort((left, right) => right.importedAt.localeCompare(left.importedAt))
+      .map(cloneImportSummary);
+  }
+
+  const db = getSQLiteDatabase();
+  return db
+    .prepare(
+      `
+        SELECT
+          id,
+          file_name AS fileName,
+          property_name AS propertyName,
+          source,
+          imported_at AS importedAt,
+          bookings_count AS bookingsCount,
+          expenses_count AS expensesCount
+        FROM imports
+        WHERE owner_email = ?
+        ORDER BY imported_at DESC
+      `,
+    )
+    .all(normalizedEmail)
+    .map((row) => mapImportSummary(row as Record<string, unknown>));
 }
 
 export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> {
@@ -1684,19 +1806,24 @@ export async function updatePropertyDefinition({
 export async function deletePropertyDefinition({
   ownerEmail,
   propertyId,
+  deleteLinkedData = false,
 }: {
   ownerEmail: string;
   propertyId: number;
+  deleteLinkedData?: boolean;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
 
   if (isPostgresConfigured()) {
     const pool = getPostgresPool();
-    const propertyResult = await pool.query(
-      "SELECT id, name FROM properties WHERE id = $1 AND owner_email = $2 LIMIT 1",
-      [propertyId, normalizedEmail],
-    );
+    const [propertyResult, propertiesCountResult] = await Promise.all([
+      pool.query("SELECT id, name FROM properties WHERE id = $1 AND owner_email = $2 LIMIT 1", [
+        propertyId,
+        normalizedEmail,
+      ]),
+      pool.query("SELECT COUNT(*) AS count FROM properties WHERE owner_email = $1", [normalizedEmail]),
+    ]);
     const propertyRow = propertyResult.rows[0] as Record<string, unknown> | undefined;
 
     if (!propertyRow) {
@@ -1704,13 +1831,17 @@ export async function deletePropertyDefinition({
     }
 
     const propertyName = String(getRowValue(propertyRow, "name"));
-    const [bookingUsage, expenseUsage] = await Promise.all([
+    const [bookingUsage, expenseUsage, importUsage] = await Promise.all([
       pool.query(
         "SELECT COUNT(*) AS count FROM bookings WHERE owner_email = $1 AND property_name = $2",
         [normalizedEmail, propertyName],
       ),
       pool.query(
         "SELECT COUNT(*) AS count FROM expenses WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
+      ),
+      pool.query(
+        "SELECT COUNT(*) AS count FROM imports WHERE owner_email = $1 AND property_name = $2",
         [normalizedEmail, propertyName],
       ),
     ]);
@@ -1721,21 +1852,58 @@ export async function deletePropertyDefinition({
     const expenseCount = Number(
       getRowValue(expenseUsage.rows[0] as Record<string, unknown>, "count"),
     );
+    const importCount = Number(
+      getRowValue(importUsage.rows[0] as Record<string, unknown>, "count"),
+    );
+    const propertiesCount = Number(
+      getRowValue(propertiesCountResult.rows[0] as Record<string, unknown>, "count"),
+    );
 
-    if (bookingCount > 0 || expenseCount > 0) {
-      throw new Error("Move or delete the linked bookings and expenses before deleting this property.");
+    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
+      throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
     }
 
-    await pool.query("DELETE FROM property_units WHERE property_id = $1 AND owner_email = $2", [
-      propertyId,
-      normalizedEmail,
-    ]);
-    await pool.query("DELETE FROM properties WHERE id = $1 AND owner_email = $2", [
-      propertyId,
-      normalizedEmail,
-    ]);
+    await pool.query("BEGIN");
 
-    return;
+    try {
+      if (deleteLinkedData) {
+        await pool.query(
+          "DELETE FROM bookings WHERE owner_email = $1 AND property_name = $2",
+          [normalizedEmail, propertyName],
+        );
+        await pool.query(
+          "DELETE FROM expenses WHERE owner_email = $1 AND property_name = $2",
+          [normalizedEmail, propertyName],
+        );
+        await pool.query(
+          "DELETE FROM imports WHERE owner_email = $1 AND property_name = $2",
+          [normalizedEmail, propertyName],
+        );
+      }
+
+      await pool.query("DELETE FROM property_units WHERE property_id = $1 AND owner_email = $2", [
+        propertyId,
+        normalizedEmail,
+      ]);
+      await pool.query("DELETE FROM properties WHERE id = $1 AND owner_email = $2", [
+        propertyId,
+        normalizedEmail,
+      ]);
+
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+
+    return {
+      deletedPropertyName: propertyName,
+      deletedBookingsCount: deleteLinkedData ? bookingCount : 0,
+      deletedExpensesCount: deleteLinkedData ? expenseCount : 0,
+      deletedImportsCount: deleteLinkedData ? importCount : 0,
+      deletedLinkedData: deleteLinkedData,
+      removedLastProperty: propertiesCount <= 1,
+    };
   }
 
   if (shouldUseMemoryFallback()) {
@@ -1754,9 +1922,24 @@ export async function deletePropertyDefinition({
     const expenseCount = store.expenses.filter(
       (expense) => expense.ownerEmail === normalizedEmail && expense.propertyName === property.name,
     ).length;
+    const importCount = store.imports.filter(
+      (entry) => entry.ownerEmail === normalizedEmail && entry.propertyName === property.name,
+    ).length;
 
-    if (bookingCount > 0 || expenseCount > 0) {
-      throw new Error("Move or delete the linked bookings and expenses before deleting this property.");
+    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
+      throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
+    }
+
+    if (deleteLinkedData) {
+      store.bookings = store.bookings.filter(
+        (booking) => !(booking.ownerEmail === normalizedEmail && booking.propertyName === property.name),
+      );
+      store.expenses = store.expenses.filter(
+        (expense) => !(expense.ownerEmail === normalizedEmail && expense.propertyName === property.name),
+      );
+      store.imports = store.imports.filter(
+        (entry) => !(entry.ownerEmail === normalizedEmail && entry.propertyName === property.name),
+      );
     }
 
     store.propertyUnits = store.propertyUnits.filter(
@@ -1766,7 +1949,15 @@ export async function deletePropertyDefinition({
       (entry) => !(entry.ownerEmail === normalizedEmail && entry.id === propertyId),
     );
 
-    return;
+    return {
+      deletedPropertyName: property.name,
+      deletedBookingsCount: deleteLinkedData ? bookingCount : 0,
+      deletedExpensesCount: deleteLinkedData ? expenseCount : 0,
+      deletedImportsCount: deleteLinkedData ? importCount : 0,
+      deletedLinkedData: deleteLinkedData,
+      removedLastProperty:
+        store.properties.filter((entry) => entry.ownerEmail === normalizedEmail).length === 0,
+    };
   }
 
   const db = getSQLiteDatabase();
@@ -1784,19 +1975,57 @@ export async function deletePropertyDefinition({
   const expenseUsage = db
     .prepare("SELECT COUNT(*) AS count FROM expenses WHERE owner_email = ? AND property_name = ?")
     .get(normalizedEmail, property.name) as { count?: number } | undefined;
+  const importUsage = db
+    .prepare("SELECT COUNT(*) AS count FROM imports WHERE owner_email = ? AND property_name = ?")
+    .get(normalizedEmail, property.name) as { count?: number } | undefined;
+  const propertiesCount = db
+    .prepare("SELECT COUNT(*) AS count FROM properties WHERE owner_email = ?")
+    .get(normalizedEmail) as { count?: number } | undefined;
 
-  if ((bookingUsage?.count ?? 0) > 0 || (expenseUsage?.count ?? 0) > 0) {
-    throw new Error("Move or delete the linked bookings and expenses before deleting this property.");
+  const bookingCount = bookingUsage?.count ?? 0;
+  const expenseCount = expenseUsage?.count ?? 0;
+  const importCount = importUsage?.count ?? 0;
+
+  if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
+    throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
   }
 
-  db.prepare("DELETE FROM property_units WHERE property_id = ? AND owner_email = ?").run(
-    propertyId,
-    normalizedEmail,
-  );
-  db.prepare("DELETE FROM properties WHERE id = ? AND owner_email = ?").run(
-    propertyId,
-    normalizedEmail,
-  );
+  const transaction = db.transaction(() => {
+    if (deleteLinkedData) {
+      db.prepare("DELETE FROM bookings WHERE owner_email = ? AND property_name = ?").run(
+        normalizedEmail,
+        property.name,
+      );
+      db.prepare("DELETE FROM expenses WHERE owner_email = ? AND property_name = ?").run(
+        normalizedEmail,
+        property.name,
+      );
+      db.prepare("DELETE FROM imports WHERE owner_email = ? AND property_name = ?").run(
+        normalizedEmail,
+        property.name,
+      );
+    }
+
+    db.prepare("DELETE FROM property_units WHERE property_id = ? AND owner_email = ?").run(
+      propertyId,
+      normalizedEmail,
+    );
+    db.prepare("DELETE FROM properties WHERE id = ? AND owner_email = ?").run(
+      propertyId,
+      normalizedEmail,
+    );
+  });
+
+  transaction();
+
+  return {
+    deletedPropertyName: property.name,
+    deletedBookingsCount: deleteLinkedData ? bookingCount : 0,
+    deletedExpensesCount: deleteLinkedData ? expenseCount : 0,
+    deletedImportsCount: deleteLinkedData ? importCount : 0,
+    deletedLinkedData: deleteLinkedData,
+    removedLastProperty: (propertiesCount?.count ?? 0) <= 1,
+  };
 }
 
 export async function insertManualBooking({
