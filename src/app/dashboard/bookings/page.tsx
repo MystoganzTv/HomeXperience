@@ -4,7 +4,12 @@ import { BookingsManager } from "@/components/bookings-manager";
 import { SectionCard } from "@/components/section-card";
 import { WorkspaceHeader } from "@/components/workspace-header";
 import { getAuthSession } from "@/lib/auth";
-import { getBookings, getLatestImport, getUserSettings } from "@/lib/db";
+import {
+  getBookings,
+  getLatestImport,
+  getPropertyDefinitions,
+  getUserSettings,
+} from "@/lib/db";
 import { formatNumber } from "@/lib/format";
 
 export const runtime = "nodejs";
@@ -18,10 +23,11 @@ export default async function BookingsPage() {
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
-  const [bookings, latestImport, userSettings] = await Promise.all([
+  const [bookings, latestImport, userSettings, properties] = await Promise.all([
     getBookings(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
+    getPropertyDefinitions(ownerEmail),
   ]);
 
   const propertyCount = new Set(bookings.map((booking) => booking.propertyName)).size;
@@ -61,7 +67,11 @@ export default async function BookingsPage() {
         title="All Bookings"
         subtitle="Every booking in this business account. Edit and delete actions only affect your own workspace."
       >
-        <BookingsManager bookings={bookings} currencyCode={userSettings.currencyCode} />
+        <BookingsManager
+          bookings={bookings}
+          currencyCode={userSettings.currencyCode}
+          properties={properties}
+        />
       </SectionCard>
     </main>
   );

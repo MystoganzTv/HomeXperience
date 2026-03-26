@@ -3,8 +3,9 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
+import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
 import { formatCurrency, formatDateLabel } from "@/lib/format";
-import type { CurrencyCode, ExpenseRecord } from "@/lib/types";
+import type { CurrencyCode, ExpenseRecord, PropertyDefinition } from "@/lib/types";
 import { Modal } from "@/components/modal";
 
 function inputClassName() {
@@ -14,13 +15,16 @@ function inputClassName() {
 export function ExpensesManager({
   expenses,
   currencyCode,
+  properties,
 }: {
   expenses: ExpenseRecord[];
   currencyCode: CurrencyCode;
+  properties: PropertyDefinition[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<ExpenseRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,13 +64,8 @@ export function ExpensesManager({
     });
   }
 
-  function deleteExpense(expense: ExpenseRecord) {
-    if (!expense.id) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete expense "${expense.description}"?`);
-    if (!confirmed) {
+  function confirmDeleteExpense() {
+    if (!expenseToDelete?.id) {
       return;
     }
 
@@ -76,7 +75,7 @@ export function ExpensesManager({
     startTransition(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/expenses/${expense.id}`, {
+          const response = await fetch(`/api/expenses/${expenseToDelete.id}`, {
             method: "DELETE",
           });
 
@@ -88,6 +87,7 @@ export function ExpensesManager({
           }
 
           setMessage(payload.message ?? "Expense deleted.");
+          setExpenseToDelete(null);
           router.refresh();
         } catch {
           setError("The expense could not be deleted.");
@@ -144,7 +144,7 @@ export function ExpensesManager({
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteExpense(expense)}
+                        onClick={() => setExpenseToDelete(expense)}
                         disabled={isPending}
                         className="inline-flex items-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-400/16 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -167,14 +167,11 @@ export function ExpensesManager({
       >
         {editingExpense ? (
           <form onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Property</span>
-              <input className={inputClassName()} name="propertyName" defaultValue={editingExpense.propertyName} required />
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Unit</span>
-              <input className={inputClassName()} name="unitName" defaultValue={editingExpense.unitName} />
-            </label>
+            <PropertyUnitFieldGroup
+              properties={properties}
+              initialPropertyName={editingExpense.propertyName}
+              initialUnitName={editingExpense.unitName}
+            />
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Date</span>
               <input className={inputClassName()} type="date" name="date" defaultValue={editingExpense.date} required />
@@ -205,6 +202,55 @@ export function ExpensesManager({
               </button>
             </div>
           </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(expenseToDelete)}
+        title={expenseToDelete ? `Delete ${expenseToDelete.description}?` : "Delete expense"}
+        onClose={() => setExpenseToDelete(null)}
+      >
+        {expenseToDelete ? (
+          <div className="space-y-5">
+            <div className="rounded-[22px] border border-rose-400/18 bg-rose-400/8 p-4 text-sm leading-6 text-slate-300">
+              This will remove the expense <span className="font-semibold text-slate-100">&ldquo;{expenseToDelete.description}&rdquo;</span> from your workspace.
+              The action cannot be undone from the app.
+            </div>
+
+            <div className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Property</p>
+                <p className="mt-1 text-sm text-slate-100">
+                  {expenseToDelete.propertyName}
+                  {expenseToDelete.unitName ? ` • ${expenseToDelete.unitName}` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Amount</p>
+                <p className="mt-1 text-sm text-slate-100">
+                  {formatCurrency(expenseToDelete.amount, false, currencyCode)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setExpenseToDelete(null)}
+                className="brand-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteExpense}
+                disabled={isPending}
+                className="inline-flex items-center justify-center rounded-2xl border border-rose-400/25 bg-rose-400/12 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-400/18 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isPending ? "Deleting expense..." : "Delete expense"}
+              </button>
+            </div>
+          </div>
         ) : null}
       </Modal>
     </>

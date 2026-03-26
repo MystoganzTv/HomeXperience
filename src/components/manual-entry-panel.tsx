@@ -3,12 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { PencilLine } from "lucide-react";
+import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
+import type { PropertyDefinition } from "@/lib/types";
 
 function inputClassName() {
   return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
 }
 
-export function ManualEntryPanel() {
+export function ManualEntryPanel({
+  properties,
+}: {
+  properties: PropertyDefinition[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [bookingMessage, setBookingMessage] = useState<string | null>(null);
@@ -104,18 +110,7 @@ export function ManualEntryPanel() {
               </span>
               <input className={inputClassName()} type="date" name="checkout" required />
             </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Property
-              </span>
-              <input className={inputClassName()} type="text" name="propertyName" placeholder="Default Property" />
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Unit
-              </span>
-              <input className={inputClassName()} type="text" name="unitName" placeholder="Unit, room, apartment..." />
-            </label>
+            <PropertyUnitFieldGroup properties={properties} />
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                 Guest name
@@ -192,18 +187,7 @@ export function ManualEntryPanel() {
               </span>
               <input className={inputClassName()} type="number" min="0.01" step="0.01" name="amount" required />
             </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Property
-              </span>
-              <input className={inputClassName()} type="text" name="propertyName" placeholder="Default Property" />
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Unit
-              </span>
-              <input className={inputClassName()} type="text" name="unitName" placeholder="Unit, room, apartment..." />
-            </label>
+            <PropertyUnitFieldGroup properties={properties} />
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                 Category

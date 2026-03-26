@@ -9,7 +9,12 @@ import {
   ReceiptText,
   Users,
 } from "lucide-react";
-import type { CurrencyCode, DashboardView, ImportSummary } from "@/lib/types";
+import type {
+  CurrencyCode,
+  DashboardView,
+  ImportSummary,
+  PropertyDefinition,
+} from "@/lib/types";
 import { formatCurrency, formatDateLabel, formatNumber, formatPercent } from "@/lib/format";
 import { ChartsPanel } from "@/components/charts-panel";
 import { FilterBar } from "@/components/filter-bar";
@@ -31,6 +36,7 @@ type DashboardShellProps = {
   manualExpensesCount: number;
   importedBookingsCount: number;
   importedExpensesCount: number;
+  properties: PropertyDefinition[];
 };
 
 type ActiveTab = "overview" | "activity" | "data";
@@ -60,6 +66,7 @@ export function DashboardShell({
   manualExpensesCount,
   importedBookingsCount,
   importedExpensesCount,
+  properties,
 }: DashboardShellProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -455,7 +462,7 @@ export function DashboardShell({
         title="Add Booking or Expense"
         onClose={() => setIsEntryOpen(false)}
       >
-        <ManualEntryPanel />
+        <ManualEntryPanel properties={properties} />
       </Modal>
     </>
   );

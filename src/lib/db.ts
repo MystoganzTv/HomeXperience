@@ -8,6 +8,8 @@ import type {
   ExpenseRecord,
   ImportSource,
   ImportSummary,
+  PropertyDefinition,
+  PropertyUnit,
   UserSettings,
 } from "./types";
 
@@ -30,14 +32,31 @@ type StoredUserSettings = UserSettings & {
   ownerEmail: string;
 };
 
+type StoredProperty = {
+  id: number;
+  ownerEmail: string;
+  name: string;
+};
+
+type StoredPropertyUnit = {
+  id: number;
+  propertyId: number;
+  ownerEmail: string;
+  name: string;
+};
+
 type MemoryStore = {
   nextImportId: number;
   nextBookingId: number;
   nextExpenseId: number;
+  nextPropertyId: number;
+  nextPropertyUnitId: number;
   imports: StoredImport[];
   bookings: StoredBooking[];
   expenses: StoredExpense[];
   settings: StoredUserSettings[];
+  properties: StoredProperty[];
+  propertyUnits: StoredPropertyUnit[];
 };
 
 const require = createRequire(import.meta.url);
@@ -96,10 +115,14 @@ function getMemoryStore() {
       nextImportId: 1,
       nextBookingId: 1,
       nextExpenseId: 1,
+      nextPropertyId: 1,
+      nextPropertyUnitId: 1,
       imports: [],
       bookings: [],
       expenses: [],
       settings: [],
+      properties: [],
+      propertyUnits: [],
     };
   }
 
@@ -177,10 +200,27 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS properties (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_email TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS property_units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property_id INTEGER NOT NULL,
+      owner_email TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_imports_owner_email ON imports(owner_email);
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_check_in ON bookings(owner_email, check_in);
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
     CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
   `);
 
   if (!hasColumn(db, "imports", "owner_email")) {
@@ -310,10 +350,27 @@ async function initializePostgresSchema() {
           updated_at TIMESTAMPTZ NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS properties (
+          id BIGSERIAL PRIMARY KEY,
+          owner_email TEXT NOT NULL,
+          name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS property_units (
+          id BIGSERIAL PRIMARY KEY,
+          property_id BIGINT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+          owner_email TEXT NOT NULL,
+          name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_imports_owner_email ON imports(owner_email);
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_check_in ON bookings(owner_email, check_in);
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
       `);
 
       await pool.query(`
@@ -473,6 +530,27 @@ function cloneUserSettings(settings: StoredUserSettings): UserSettings {
   return {
     businessName: settings.businessName,
     currencyCode: settings.currencyCode,
+  };
+}
+
+function clonePropertyUnit(unit: StoredPropertyUnit): PropertyUnit {
+  return {
+    id: unit.id,
+    name: unit.name,
+  };
+}
+
+function buildPropertyDefinition(
+  property: StoredProperty,
+  units: StoredPropertyUnit[],
+): PropertyDefinition {
+  return {
+    id: property.id,
+    name: property.name,
+    units: units
+      .filter((unit) => unit.propertyId === property.id)
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(clonePropertyUnit),
   };
 }
 
@@ -1145,6 +1223,291 @@ export async function getExpenses(ownerEmail: string): Promise<ExpenseRecord[]> 
     )
     .all(normalizedEmail)
     .map((row) => mapExpenseRecord(row as Record<string, unknown>));
+}
+
+export async function getPropertyDefinitions(
+  ownerEmail: string,
+): Promise<PropertyDefinition[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const [propertiesResult, unitsResult] = await Promise.all([
+      pool.query(
+        `
+          SELECT id, name
+          FROM properties
+          WHERE owner_email = $1
+          ORDER BY name ASC
+        `,
+        [normalizedEmail],
+      ),
+      pool.query(
+        `
+          SELECT id, property_id AS propertyId, name
+          FROM property_units
+          WHERE owner_email = $1
+          ORDER BY name ASC
+        `,
+        [normalizedEmail],
+      ),
+    ]);
+
+    return propertiesResult.rows.map((propertyRow) => ({
+      id: Number(getRowValue(propertyRow as Record<string, unknown>, "id")),
+      name: String(getRowValue(propertyRow as Record<string, unknown>, "name")),
+      units: unitsResult.rows
+        .filter(
+          (unitRow) =>
+            Number(getRowValue(unitRow as Record<string, unknown>, "propertyId", "propertyid")) ===
+            Number(getRowValue(propertyRow as Record<string, unknown>, "id")),
+        )
+        .map((unitRow) => ({
+          id: Number(getRowValue(unitRow as Record<string, unknown>, "id")),
+          name: String(getRowValue(unitRow as Record<string, unknown>, "name")),
+        })),
+    }));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const properties = store.properties
+      .filter((property) => property.ownerEmail === normalizedEmail)
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const units = store.propertyUnits.filter((unit) => unit.ownerEmail === normalizedEmail);
+
+    return properties.map((property) => buildPropertyDefinition(property, units));
+  }
+
+  const db = getSQLiteDatabase();
+  const propertyRows = db
+    .prepare(
+      `
+        SELECT id, name
+        FROM properties
+        WHERE owner_email = ?
+        ORDER BY name ASC
+      `,
+    )
+    .all(normalizedEmail) as Array<Record<string, unknown>>;
+  const unitRows = db
+    .prepare(
+      `
+        SELECT id, property_id AS propertyId, name
+        FROM property_units
+        WHERE owner_email = ?
+        ORDER BY name ASC
+      `,
+    )
+    .all(normalizedEmail) as Array<Record<string, unknown>>;
+
+  return propertyRows.map((propertyRow) => ({
+    id: Number(getRowValue(propertyRow, "id")),
+    name: String(getRowValue(propertyRow, "name")),
+    units: unitRows
+      .filter(
+        (unitRow) =>
+          Number(getRowValue(unitRow, "propertyId", "propertyid")) ===
+          Number(getRowValue(propertyRow, "id")),
+      )
+      .map((unitRow) => ({
+        id: Number(getRowValue(unitRow, "id")),
+        name: String(getRowValue(unitRow, "name")),
+      })),
+  }));
+}
+
+export async function createPropertyDefinition({
+  ownerEmail,
+  name,
+}: {
+  ownerEmail: string;
+  name: string;
+}): Promise<number> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const normalizedName = name.trim();
+
+  if (!normalizedName) {
+    throw new Error("Enter a property name.");
+  }
+
+  const createdAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const duplicate = await pool.query(
+      "SELECT id FROM properties WHERE owner_email = $1 AND LOWER(name) = LOWER($2) LIMIT 1",
+      [normalizedEmail, normalizedName],
+    );
+
+    if (duplicate.rows[0]) {
+      throw new Error("That property already exists.");
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO properties (owner_email, name, created_at)
+        VALUES ($1, $2, $3)
+        RETURNING id
+      `,
+      [normalizedEmail, normalizedName, createdAt],
+    );
+
+    return Number(result.rows[0]?.id ?? 0);
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const duplicate = store.properties.find(
+      (property) =>
+        property.ownerEmail === normalizedEmail &&
+        property.name.toLowerCase() === normalizedName.toLowerCase(),
+    );
+
+    if (duplicate) {
+      throw new Error("That property already exists.");
+    }
+
+    const id = store.nextPropertyId++;
+    store.properties.push({
+      id,
+      ownerEmail: normalizedEmail,
+      name: normalizedName,
+    });
+    return id;
+  }
+
+  const db = getSQLiteDatabase();
+  const duplicate = db
+    .prepare(
+      "SELECT id FROM properties WHERE owner_email = ? AND LOWER(name) = LOWER(?) LIMIT 1",
+    )
+    .get(normalizedEmail, normalizedName) as { id?: number } | undefined;
+
+  if (duplicate?.id) {
+    throw new Error("That property already exists.");
+  }
+
+  const result = db
+    .prepare(
+      `
+        INSERT INTO properties (owner_email, name, created_at)
+        VALUES (?, ?, ?)
+      `,
+    )
+    .run(normalizedEmail, normalizedName, createdAt);
+
+  return Number(result.lastInsertRowid);
+}
+
+export async function createPropertyUnit({
+  ownerEmail,
+  propertyId,
+  name,
+}: {
+  ownerEmail: string;
+  propertyId: number;
+  name: string;
+}): Promise<number> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const normalizedName = name.trim();
+
+  if (!normalizedName) {
+    throw new Error("Enter a unit name.");
+  }
+
+  const createdAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const propertyResult = await pool.query(
+      "SELECT id FROM properties WHERE id = $1 AND owner_email = $2 LIMIT 1",
+      [propertyId, normalizedEmail],
+    );
+
+    if (!propertyResult.rows[0]) {
+      throw new Error("Property not found.");
+    }
+
+    const duplicate = await pool.query(
+      "SELECT id FROM property_units WHERE property_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1",
+      [propertyId, normalizedName],
+    );
+
+    if (duplicate.rows[0]) {
+      throw new Error("That unit already exists for this property.");
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO property_units (property_id, owner_email, name, created_at)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `,
+      [propertyId, normalizedEmail, normalizedName, createdAt],
+    );
+
+    return Number(result.rows[0]?.id ?? 0);
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const property = store.properties.find(
+      (entry) => entry.id === propertyId && entry.ownerEmail === normalizedEmail,
+    );
+
+    if (!property) {
+      throw new Error("Property not found.");
+    }
+
+    const duplicate = store.propertyUnits.find(
+      (unit) => unit.propertyId === propertyId && unit.name.toLowerCase() === normalizedName.toLowerCase(),
+    );
+
+    if (duplicate) {
+      throw new Error("That unit already exists for this property.");
+    }
+
+    const id = store.nextPropertyUnitId++;
+    store.propertyUnits.push({
+      id,
+      propertyId,
+      ownerEmail: normalizedEmail,
+      name: normalizedName,
+    });
+    return id;
+  }
+
+  const db = getSQLiteDatabase();
+  const property = db
+    .prepare("SELECT id FROM properties WHERE id = ? AND owner_email = ? LIMIT 1")
+    .get(propertyId, normalizedEmail) as { id?: number } | undefined;
+
+  if (!property?.id) {
+    throw new Error("Property not found.");
+  }
+
+  const duplicate = db
+    .prepare("SELECT id FROM property_units WHERE property_id = ? AND LOWER(name) = LOWER(?) LIMIT 1")
+    .get(propertyId, normalizedName) as { id?: number } | undefined;
+
+  if (duplicate?.id) {
+    throw new Error("That unit already exists for this property.");
+  }
+
+  const result = db
+    .prepare(
+      `
+        INSERT INTO property_units (property_id, owner_email, name, created_at)
+        VALUES (?, ?, ?, ?)
+      `,
+    )
+    .run(propertyId, normalizedEmail, normalizedName, createdAt);
+
+  return Number(result.lastInsertRowid);
 }
 
 export async function insertManualBooking({

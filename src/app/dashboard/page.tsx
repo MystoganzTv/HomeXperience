@@ -1,6 +1,12 @@
 import { redirect } from "next/navigation";
 import { buildDashboardView, getDashboardFilters } from "@/lib/dashboard";
-import { getBookings, getExpenses, getLatestImport, getUserSettings } from "@/lib/db";
+import {
+  getBookings,
+  getExpenses,
+  getLatestImport,
+  getPropertyDefinitions,
+  getUserSettings,
+} from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { DashboardShell } from "@/components/dashboard-shell";
 
@@ -25,6 +31,7 @@ export default async function DashboardPage({
   const expenses = await getExpenses(ownerEmail);
   const latestImport = await getLatestImport(ownerEmail);
   const userSettings = await getUserSettings(ownerEmail, userName);
+  const properties = await getPropertyDefinitions(ownerEmail);
   const resolvedSearchParams = await searchParams;
   const filters = getDashboardFilters(resolvedSearchParams, bookings, expenses);
   const view = buildDashboardView({
@@ -49,6 +56,7 @@ export default async function DashboardPage({
       manualExpensesCount={manualExpensesCount}
       importedBookingsCount={importedBookingsCount}
       importedExpensesCount={importedExpensesCount}
+      properties={properties}
     />
   );
 }

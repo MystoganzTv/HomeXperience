@@ -3,8 +3,9 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
+import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
-import type { BookingRecord, CurrencyCode } from "@/lib/types";
+import type { BookingRecord, CurrencyCode, PropertyDefinition } from "@/lib/types";
 import { Modal } from "@/components/modal";
 
 function inputClassName() {
@@ -14,13 +15,16 @@ function inputClassName() {
 export function BookingsManager({
   bookings,
   currencyCode,
+  properties,
 }: {
   bookings: BookingRecord[];
   currencyCode: CurrencyCode;
+  properties: PropertyDefinition[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editingBooking, setEditingBooking] = useState<BookingRecord | null>(null);
+  const [bookingToDelete, setBookingToDelete] = useState<BookingRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,13 +64,8 @@ export function BookingsManager({
     });
   }
 
-  function deleteBooking(booking: BookingRecord) {
-    if (!booking.id) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete booking for ${booking.guestName}?`);
-    if (!confirmed) {
+  function confirmDeleteBooking() {
+    if (!bookingToDelete?.id) {
       return;
     }
 
@@ -76,7 +75,7 @@ export function BookingsManager({
     startTransition(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/bookings/${booking.id}`, {
+          const response = await fetch(`/api/bookings/${bookingToDelete.id}`, {
             method: "DELETE",
           });
 
@@ -88,6 +87,7 @@ export function BookingsManager({
           }
 
           setMessage(payload.message ?? "Booking deleted.");
+          setBookingToDelete(null);
           router.refresh();
         } catch {
           setError("The booking could not be deleted.");
@@ -150,7 +150,7 @@ export function BookingsManager({
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteBooking(booking)}
+                        onClick={() => setBookingToDelete(booking)}
                         disabled={isPending}
                         className="inline-flex items-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-400/16 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -173,14 +173,11 @@ export function BookingsManager({
       >
         {editingBooking ? (
           <form onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Property</span>
-              <input className={inputClassName()} name="propertyName" defaultValue={editingBooking.propertyName} required />
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Unit</span>
-              <input className={inputClassName()} name="unitName" defaultValue={editingBooking.unitName} />
-            </label>
+            <PropertyUnitFieldGroup
+              properties={properties}
+              initialPropertyName={editingBooking.propertyName}
+              initialUnitName={editingBooking.unitName}
+            />
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Check-in</span>
               <input className={inputClassName()} type="date" name="checkIn" defaultValue={editingBooking.checkIn} required />
@@ -231,6 +228,55 @@ export function BookingsManager({
               </button>
             </div>
           </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(bookingToDelete)}
+        title={bookingToDelete ? `Delete ${bookingToDelete.guestName}?` : "Delete booking"}
+        onClose={() => setBookingToDelete(null)}
+      >
+        {bookingToDelete ? (
+          <div className="space-y-5">
+            <div className="rounded-[22px] border border-rose-400/18 bg-rose-400/8 p-4 text-sm leading-6 text-slate-300">
+              This will remove the booking for <span className="font-semibold text-slate-100">{bookingToDelete.guestName}</span> from your workspace.
+              The action cannot be undone from the app.
+            </div>
+
+            <div className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Property</p>
+                <p className="mt-1 text-sm text-slate-100">
+                  {bookingToDelete.propertyName}
+                  {bookingToDelete.unitName ? ` • ${bookingToDelete.unitName}` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Stay</p>
+                <p className="mt-1 text-sm text-slate-100">
+                  {formatDateLabel(bookingToDelete.checkIn)} to {formatDateLabel(bookingToDelete.checkout)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setBookingToDelete(null)}
+                className="brand-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteBooking}
+                disabled={isPending}
+                className="inline-flex items-center justify-center rounded-2xl border border-rose-400/25 bg-rose-400/12 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-400/18 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isPending ? "Deleting booking..." : "Delete booking"}
+              </button>
+            </div>
+          </div>
         ) : null}
       </Modal>
     </>

@@ -51,6 +51,17 @@ export type UserSettings = {
   currencyCode: CurrencyCode;
 };
 
+export type PropertyUnit = {
+  id?: number;
+  name: string;
+};
+
+export type PropertyDefinition = {
+  id?: number;
+  name: string;
+  units: PropertyUnit[];
+};
+
 export type DashboardFilters = {
   year: number | "all";
   month: number | "all";

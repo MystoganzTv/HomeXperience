@@ -4,7 +4,12 @@ import { ExpensesManager } from "@/components/expenses-manager";
 import { SectionCard } from "@/components/section-card";
 import { WorkspaceHeader } from "@/components/workspace-header";
 import { getAuthSession } from "@/lib/auth";
-import { getExpenses, getLatestImport, getUserSettings } from "@/lib/db";
+import {
+  getExpenses,
+  getLatestImport,
+  getPropertyDefinitions,
+  getUserSettings,
+} from "@/lib/db";
 import { formatCurrency, formatNumber } from "@/lib/format";
 
 export const runtime = "nodejs";
@@ -18,10 +23,11 @@ export default async function ExpensesPage() {
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
-  const [expenses, latestImport, userSettings] = await Promise.all([
+  const [expenses, latestImport, userSettings, properties] = await Promise.all([
     getExpenses(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
+    getPropertyDefinitions(ownerEmail),
   ]);
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -63,7 +69,11 @@ export default async function ExpensesPage() {
         title="All Expenses"
         subtitle="Every expense saved in this business account, including imports and manual entries."
       >
-        <ExpensesManager expenses={expenses} currencyCode={userSettings.currencyCode} />
+        <ExpensesManager
+          expenses={expenses}
+          currencyCode={userSettings.currencyCode}
+          properties={properties}
+        />
       </SectionCard>
     </main>
   );
