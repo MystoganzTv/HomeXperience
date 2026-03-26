@@ -6,6 +6,7 @@ import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
 import { getBookings, getExpenses, getLatestImport, getUserSettings } from "@/lib/db";
 import { formatNumber } from "@/lib/format";
+import { getMarketDefinition } from "@/lib/markets";
 
 export const runtime = "nodejs";
 
@@ -22,12 +23,13 @@ export default async function ProfilePage() {
   const expenses = await getExpenses(ownerEmail);
   const latestImport = await getLatestImport(ownerEmail);
   const userSettings = await getUserSettings(ownerEmail, userName);
+  const primaryMarket = getMarketDefinition(userSettings.primaryCountryCode);
 
   return (
     <WorkspaceShell
       activePage="profile"
       pageTitle="Profile"
-      pageSubtitle="Manage your business identity, currency, and account settings."
+      pageSubtitle="Manage your business identity, reporting markets, and account settings."
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -70,8 +72,12 @@ export default async function ProfilePage() {
                   <Globe2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[var(--workspace-text)]">{userSettings.currencyCode}</p>
-                  <p className="text-sm text-[var(--workspace-muted)]">Currency for cards, charts, tables, and reports</p>
+                  <p className="text-sm font-medium text-[var(--workspace-text)]">
+                    {primaryMarket.countryName} • {primaryMarket.currencyCode}
+                  </p>
+                  <p className="text-sm text-[var(--workspace-muted)]">
+                    Default market used when reports include several countries at once
+                  </p>
                 </div>
               </div>
             </div>
@@ -96,7 +102,7 @@ export default async function ProfilePage() {
 
         <BusinessSettingsPanel
           initialBusinessName={userSettings.businessName}
-          initialCurrencyCode={userSettings.currencyCode}
+          initialPrimaryCountryCode={userSettings.primaryCountryCode}
         />
       </div>
     </WorkspaceShell>

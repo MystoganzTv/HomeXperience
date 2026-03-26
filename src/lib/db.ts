@@ -4,7 +4,7 @@ import path from "node:path";
 import { Pool } from "pg";
 import type {
   BookingRecord,
-  CurrencyCode,
+  CountryCode,
   ExpenseRecord,
   ImportSource,
   ImportSummary,
@@ -12,6 +12,11 @@ import type {
   PropertyUnit,
   UserSettings,
 } from "./types";
+import {
+  getCountryForCurrency,
+  getCurrencyForCountry,
+  normalizeCountryCode,
+} from "./markets";
 
 type SQLiteDatabase = import("better-sqlite3").Database;
 type SQLiteModule = typeof import("better-sqlite3");
@@ -36,6 +41,7 @@ type StoredProperty = {
   id: number;
   ownerEmail: string;
   name: string;
+  countryCode: CountryCode;
 };
 
 type StoredPropertyUnit = {
@@ -91,14 +97,12 @@ function normalizeOwnerEmail(ownerEmail: string) {
 }
 
 function getDefaultUserSettings(fallbackBusinessName: string): UserSettings {
+  const primaryCountryCode = "US";
   return {
     businessName: fallbackBusinessName.trim() || "My rental business",
-    currencyCode: "USD",
+    primaryCountryCode,
+    currencyCode: getCurrencyForCountry(primaryCountryCode),
   };
-}
-
-function normalizeCurrencyCode(value: string | undefined): CurrencyCode {
-  return value === "EUR" ? "EUR" : "USD";
 }
 
 function getSQLiteModule() {
@@ -196,6 +200,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS user_settings (
       owner_email TEXT PRIMARY KEY,
       business_name TEXT NOT NULL,
+      primary_country_code TEXT NOT NULL DEFAULT 'US',
       currency_code TEXT NOT NULL DEFAULT 'USD',
       updated_at TEXT NOT NULL
     );
@@ -204,6 +209,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_email TEXT NOT NULL,
       name TEXT NOT NULL,
+      country_code TEXT NOT NULL DEFAULT 'US',
       created_at TEXT NOT NULL
     );
 
@@ -257,6 +263,14 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "expenses", "unit_name")) {
     db.exec("ALTER TABLE expenses ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "user_settings", "primary_country_code")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN primary_country_code TEXT NOT NULL DEFAULT 'US';");
+  }
+
+  if (!hasColumn(db, "properties", "country_code")) {
+    db.exec("ALTER TABLE properties ADD COLUMN country_code TEXT NOT NULL DEFAULT 'US';");
   }
 }
 
@@ -346,6 +360,7 @@ async function initializePostgresSchema() {
         CREATE TABLE IF NOT EXISTS user_settings (
           owner_email TEXT PRIMARY KEY,
           business_name TEXT NOT NULL,
+          primary_country_code TEXT NOT NULL DEFAULT 'US',
           currency_code TEXT NOT NULL DEFAULT 'USD',
           updated_at TIMESTAMPTZ NOT NULL
         );
@@ -354,6 +369,7 @@ async function initializePostgresSchema() {
           id BIGSERIAL PRIMARY KEY,
           owner_email TEXT NOT NULL,
           name TEXT NOT NULL,
+          country_code TEXT NOT NULL DEFAULT 'US',
           created_at TIMESTAMPTZ NOT NULL
         );
 
@@ -373,6 +389,14 @@ async function initializePostgresSchema() {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
       `);
 
+      await pool.query(`
+        ALTER TABLE user_settings
+        ADD COLUMN IF NOT EXISTS primary_country_code TEXT NOT NULL DEFAULT 'US'
+      `);
+      await pool.query(`
+        ALTER TABLE properties
+        ADD COLUMN IF NOT EXISTS country_code TEXT NOT NULL DEFAULT 'US'
+      `);
       await pool.query(`
         ALTER TABLE bookings
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
@@ -529,6 +553,7 @@ function cloneExpenseRecord(expense: StoredExpense): ExpenseRecord {
 function cloneUserSettings(settings: StoredUserSettings): UserSettings {
   return {
     businessName: settings.businessName,
+    primaryCountryCode: settings.primaryCountryCode,
     currencyCode: settings.currencyCode,
   };
 }
@@ -547,6 +572,7 @@ function buildPropertyDefinition(
   return {
     id: property.id,
     name: property.name,
+    countryCode: property.countryCode,
     units: units
       .filter((unit) => unit.propertyId === property.id)
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -1236,7 +1262,7 @@ export async function getPropertyDefinitions(
     const [propertiesResult, unitsResult] = await Promise.all([
       pool.query(
         `
-          SELECT id, name
+          SELECT id, name, country_code AS countryCode
           FROM properties
           WHERE owner_email = $1
           ORDER BY name ASC
@@ -1257,6 +1283,9 @@ export async function getPropertyDefinitions(
     return propertiesResult.rows.map((propertyRow) => ({
       id: Number(getRowValue(propertyRow as Record<string, unknown>, "id")),
       name: String(getRowValue(propertyRow as Record<string, unknown>, "name")),
+      countryCode: normalizeCountryCode(
+        String(getRowValue(propertyRow as Record<string, unknown>, "countryCode", "countrycode") ?? "US"),
+      ),
       units: unitsResult.rows
         .filter(
           (unitRow) =>
@@ -1284,7 +1313,7 @@ export async function getPropertyDefinitions(
   const propertyRows = db
     .prepare(
       `
-        SELECT id, name
+        SELECT id, name, country_code AS countryCode
         FROM properties
         WHERE owner_email = ?
         ORDER BY name ASC
@@ -1305,6 +1334,9 @@ export async function getPropertyDefinitions(
   return propertyRows.map((propertyRow) => ({
     id: Number(getRowValue(propertyRow, "id")),
     name: String(getRowValue(propertyRow, "name")),
+    countryCode: normalizeCountryCode(
+      String(getRowValue(propertyRow, "countryCode", "countrycode") ?? "US"),
+    ),
     units: unitRows
       .filter(
         (unitRow) =>
@@ -1321,13 +1353,16 @@ export async function getPropertyDefinitions(
 export async function createPropertyDefinition({
   ownerEmail,
   name,
+  countryCode,
 }: {
   ownerEmail: string;
   name: string;
+  countryCode: CountryCode;
 }): Promise<number> {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
   const normalizedName = name.trim();
+  const normalizedCountryCode = normalizeCountryCode(countryCode);
 
   if (!normalizedName) {
     throw new Error("Enter a property name.");
@@ -1348,11 +1383,11 @@ export async function createPropertyDefinition({
 
     const result = await pool.query(
       `
-        INSERT INTO properties (owner_email, name, created_at)
-        VALUES ($1, $2, $3)
+        INSERT INTO properties (owner_email, name, country_code, created_at)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
       `,
-      [normalizedEmail, normalizedName, createdAt],
+      [normalizedEmail, normalizedName, normalizedCountryCode, createdAt],
     );
 
     return Number(result.rows[0]?.id ?? 0);
@@ -1375,6 +1410,7 @@ export async function createPropertyDefinition({
       id,
       ownerEmail: normalizedEmail,
       name: normalizedName,
+      countryCode: normalizedCountryCode,
     });
     return id;
   }
@@ -1393,11 +1429,11 @@ export async function createPropertyDefinition({
   const result = db
     .prepare(
       `
-        INSERT INTO properties (owner_email, name, created_at)
-        VALUES (?, ?, ?)
+        INSERT INTO properties (owner_email, name, country_code, created_at)
+        VALUES (?, ?, ?, ?)
       `,
     )
-    .run(normalizedEmail, normalizedName, createdAt);
+    .run(normalizedEmail, normalizedName, normalizedCountryCode, createdAt);
 
   return Number(result.lastInsertRowid);
 }
@@ -1514,14 +1550,17 @@ export async function updatePropertyDefinition({
   ownerEmail,
   propertyId,
   name,
+  countryCode,
 }: {
   ownerEmail: string;
   propertyId: number;
   name: string;
+  countryCode: CountryCode;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
   const normalizedName = name.trim();
+  const normalizedCountryCode = normalizeCountryCode(countryCode);
 
   if (!normalizedName) {
     throw new Error("Enter a property name.");
@@ -1549,11 +1588,10 @@ export async function updatePropertyDefinition({
       throw new Error("That property already exists.");
     }
 
-    await pool.query("UPDATE properties SET name = $1 WHERE id = $2 AND owner_email = $3", [
-      normalizedName,
-      propertyId,
-      normalizedEmail,
-    ]);
+    await pool.query(
+      "UPDATE properties SET name = $1, country_code = $2 WHERE id = $3 AND owner_email = $4",
+      [normalizedName, normalizedCountryCode, propertyId, normalizedEmail],
+    );
     await pool.query(
       "UPDATE bookings SET property_name = $1 WHERE owner_email = $2 AND property_name = $3",
       [normalizedName, normalizedEmail, currentName],
@@ -1589,6 +1627,7 @@ export async function updatePropertyDefinition({
 
     const currentName = property.name;
     property.name = normalizedName;
+    property.countryCode = normalizedCountryCode;
 
     for (const booking of store.bookings) {
       if (booking.ownerEmail === normalizedEmail && booking.propertyName === currentName) {
@@ -1624,8 +1663,9 @@ export async function updatePropertyDefinition({
     throw new Error("That property already exists.");
   }
 
-  db.prepare("UPDATE properties SET name = ? WHERE id = ? AND owner_email = ?").run(
+  db.prepare("UPDATE properties SET name = ?, country_code = ? WHERE id = ? AND owner_email = ?").run(
     normalizedName,
+    normalizedCountryCode,
     propertyId,
     normalizedEmail,
   );
@@ -2247,6 +2287,7 @@ export async function getUserSettings(
       `
         SELECT
           business_name AS businessName,
+          primary_country_code AS primaryCountryCode,
           currency_code AS currencyCode
         FROM user_settings
         WHERE owner_email = $1
@@ -2258,11 +2299,20 @@ export async function getUserSettings(
       return defaults;
     }
 
+    const primaryCountryCode = normalizeCountryCode(
+      String(
+        result.rows[0].primarycountrycode ??
+          result.rows[0].primaryCountryCode ??
+          getCountryForCurrency(
+            String(result.rows[0].currencycode ?? result.rows[0].currencyCode ?? defaults.currencyCode),
+          ),
+      ),
+    );
+
     return {
       businessName: String(result.rows[0].businessname ?? result.rows[0].businessName ?? defaults.businessName),
-      currencyCode: normalizeCurrencyCode(
-        String(result.rows[0].currencycode ?? result.rows[0].currencyCode ?? defaults.currencyCode),
-      ),
+      primaryCountryCode,
+      currencyCode: getCurrencyForCountry(primaryCountryCode),
     };
   }
 
@@ -2278,6 +2328,7 @@ export async function getUserSettings(
       `
         SELECT
           business_name AS businessName,
+          primary_country_code AS primaryCountryCode,
           currency_code AS currencyCode
         FROM user_settings
         WHERE owner_email = ?
@@ -2289,42 +2340,58 @@ export async function getUserSettings(
     return defaults;
   }
 
+  const primaryCountryCode = normalizeCountryCode(
+    String(
+      getRowValue(row, "primaryCountryCode", "primarycountrycode") ??
+        getCountryForCurrency(
+          String(getRowValue(row, "currencyCode", "currencycode") ?? defaults.currencyCode),
+        ),
+    ),
+  );
+
   return {
     businessName: String(getRowValue(row, "businessName", "businessname") ?? defaults.businessName),
-    currencyCode: normalizeCurrencyCode(
-      String(getRowValue(row, "currencyCode", "currencycode") ?? defaults.currencyCode),
-    ),
+    primaryCountryCode,
+    currencyCode: getCurrencyForCountry(primaryCountryCode),
   };
 }
 
 export async function upsertUserSettings({
   ownerEmail,
   businessName,
-  currencyCode,
+  primaryCountryCode,
 }: {
   ownerEmail: string;
   businessName: string;
-  currencyCode: CurrencyCode;
+  primaryCountryCode: CountryCode;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
   const normalizedBusinessName = businessName.trim() || "My rental business";
-  const normalizedCurrencyCode = normalizeCurrencyCode(currencyCode);
+  const normalizedPrimaryCountryCode = normalizeCountryCode(primaryCountryCode);
+  const normalizedCurrencyCode = getCurrencyForCountry(normalizedPrimaryCountryCode);
   const updatedAt = new Date().toISOString();
 
   if (isPostgresConfigured()) {
     const pool = getPostgresPool();
     await pool.query(
       `
-        INSERT INTO user_settings (owner_email, business_name, currency_code, updated_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO user_settings (owner_email, business_name, primary_country_code, currency_code, updated_at)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (owner_email)
         DO UPDATE SET
           business_name = EXCLUDED.business_name,
+          primary_country_code = EXCLUDED.primary_country_code,
           currency_code = EXCLUDED.currency_code,
           updated_at = EXCLUDED.updated_at
       `,
-      [normalizedEmail, normalizedBusinessName, normalizedCurrencyCode, updatedAt],
+      [
+        normalizedEmail,
+        normalizedBusinessName,
+        normalizedPrimaryCountryCode,
+        normalizedCurrencyCode,
+        updatedAt,
+      ],
     );
 
     return;
@@ -2336,6 +2403,7 @@ export async function upsertUserSettings({
     const nextSettings: StoredUserSettings = {
       ownerEmail: normalizedEmail,
       businessName: normalizedBusinessName,
+      primaryCountryCode: normalizedPrimaryCountryCode,
       currencyCode: normalizedCurrencyCode,
     };
 
@@ -2351,12 +2419,19 @@ export async function upsertUserSettings({
   const db = getSQLiteDatabase();
   db.prepare(
     `
-      INSERT INTO user_settings (owner_email, business_name, currency_code, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO user_settings (owner_email, business_name, primary_country_code, currency_code, updated_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(owner_email) DO UPDATE SET
         business_name = excluded.business_name,
+        primary_country_code = excluded.primary_country_code,
         currency_code = excluded.currency_code,
         updated_at = excluded.updated_at
     `,
-  ).run(normalizedEmail, normalizedBusinessName, normalizedCurrencyCode, updatedAt);
+  ).run(
+    normalizedEmail,
+    normalizedBusinessName,
+    normalizedPrimaryCountryCode,
+    normalizedCurrencyCode,
+    updatedAt,
+  );
 }

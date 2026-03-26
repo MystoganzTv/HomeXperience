@@ -3,6 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { startTransition, useEffect } from "react";
 import { Funnel } from "lucide-react";
+import { getMarketDefinition } from "@/lib/markets";
+import type { CountryCode } from "@/lib/types";
 
 const monthOptions = [
   { value: "all", label: "All months" },
@@ -29,15 +31,19 @@ function selectClassName() {
 export function FilterBar({
   years,
   channels,
+  countries,
   selectedYear,
   selectedMonth,
   selectedChannel,
+  selectedCountryCode,
 }: {
   years: number[];
   channels: string[];
+  countries: CountryCode[];
   selectedYear: number | "all";
   selectedMonth: number | "all";
   selectedChannel: string | "all";
+  selectedCountryCode: CountryCode | "all";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,7 +51,10 @@ export function FilterBar({
 
   useEffect(() => {
     const hasExplicitFilters =
-      searchParams.has("year") || searchParams.has("month") || searchParams.has("channel");
+      searchParams.has("year") ||
+      searchParams.has("month") ||
+      searchParams.has("channel") ||
+      searchParams.has("country");
 
     if (hasExplicitFilters) {
       return;
@@ -62,6 +71,7 @@ export function FilterBar({
         year?: string;
         month?: string;
         channel?: string;
+        country?: string;
       };
       const params = new URLSearchParams(searchParams.toString());
 
@@ -77,6 +87,10 @@ export function FilterBar({
         params.set("channel", parsed.channel);
       }
 
+      if (parsed.country) {
+        params.set("country", parsed.country);
+      }
+
       if (params.toString()) {
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       }
@@ -85,7 +99,7 @@ export function FilterBar({
     }
   }, [pathname, router, searchParams]);
 
-  function updateFilter(key: "year" | "month" | "channel", value: string) {
+  function updateFilter(key: "year" | "month" | "channel" | "country", value: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set(key, value);
 
@@ -99,6 +113,7 @@ export function FilterBar({
         year: params.get("year") ?? "all",
         month: params.get("month") ?? "all",
         channel: params.get("channel") ?? "all",
+        country: params.get("country") ?? "all",
       }),
     );
 
@@ -112,6 +127,37 @@ export function FilterBar({
       <div className="flex items-center gap-2 px-2 text-sm font-semibold text-[var(--workspace-muted)]">
         <Funnel className="h-4 w-4 text-[var(--workspace-accent)]" />
         Filters
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => updateFilter("country", "all")}
+          className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+            selectedCountryCode === "all"
+              ? "workspace-button-primary"
+              : "workspace-button-secondary"
+          }`}
+        >
+          All markets
+        </button>
+        {countries.map((countryCode) => {
+          const market = getMarketDefinition(countryCode);
+
+          return (
+            <button
+              key={countryCode}
+              type="button"
+              onClick={() => updateFilter("country", countryCode)}
+              className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                selectedCountryCode === countryCode
+                  ? "workspace-button-primary"
+                  : "workspace-button-secondary"
+              }`}
+            >
+              {market.shortLabel}
+            </button>
+          );
+        })}
       </div>
       <select
         className={`${selectClassName()} min-w-[150px]`}

@@ -2,8 +2,9 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Settings2 } from "lucide-react";
-import type { CurrencyCode } from "@/lib/types";
+import { Building2, Globe2, Settings2 } from "lucide-react";
+import { marketDefinitions } from "@/lib/markets";
+import type { CountryCode } from "@/lib/types";
 
 function inputClassName() {
   return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
@@ -11,15 +12,15 @@ function inputClassName() {
 
 export function BusinessSettingsPanel({
   initialBusinessName,
-  initialCurrencyCode,
+  initialPrimaryCountryCode,
 }: {
   initialBusinessName: string;
-  initialCurrencyCode: CurrencyCode;
+  initialPrimaryCountryCode: CountryCode;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [businessName, setBusinessName] = useState(initialBusinessName);
-  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(initialCurrencyCode);
+  const [primaryCountryCode, setPrimaryCountryCode] = useState<CountryCode>(initialPrimaryCountryCode);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +34,7 @@ export function BusinessSettingsPanel({
         try {
           const formData = new FormData();
           formData.set("businessName", businessName);
-          formData.set("currencyCode", currencyCode);
+          formData.set("primaryCountryCode", primaryCountryCode);
 
           const response = await fetch("/api/settings", {
             method: "POST",
@@ -67,7 +68,7 @@ export function BusinessSettingsPanel({
             Business Settings
           </p>
           <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
-            Each account keeps its own business name, currency, imports, and manual entries.
+            Each account keeps its own business identity, reporting market, imports, and manual entries.
           </p>
         </div>
         <div className="workspace-icon-chip rounded-3xl p-3">
@@ -94,20 +95,46 @@ export function BusinessSettingsPanel({
           </div>
         </label>
 
-        <label className="space-y-2">
+        <div className="space-y-2">
           <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-            Currency
+            Primary reporting market
           </span>
-          <select
-            className={inputClassName()}
-            name="currencyCode"
-            value={currencyCode}
-            onChange={(event) => setCurrencyCode(event.target.value as CurrencyCode)}
-          >
-            <option value="USD">USD - US Dollar</option>
-            <option value="EUR">EUR - Euro</option>
-          </select>
-        </label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {marketDefinitions.map((market) => {
+              const isSelected = primaryCountryCode === market.countryCode;
+
+              return (
+                <button
+                  key={market.countryCode}
+                  type="button"
+                  onClick={() => setPrimaryCountryCode(market.countryCode)}
+                  className={`rounded-[24px] border px-4 py-4 text-left transition ${
+                    isSelected
+                      ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)] shadow-[0_0_0_1px_rgba(88,196,182,0.16)]"
+                      : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)] hover:border-[var(--workspace-accent)]/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="workspace-icon-chip rounded-2xl p-2.5">
+                      <Globe2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{market.shortLabel}</p>
+                      <p className="text-xs text-inherit/80">{market.regionLabel}</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm font-medium">{market.countryName}</p>
+                  <p className="mt-1 text-xs text-inherit/80">
+                    {market.currencyCode} • {market.currencyLabel}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-5 text-[var(--workspace-muted)]">
+            This becomes the default market Hostlyx uses when your dashboard is showing all countries at once.
+          </p>
+        </div>
 
         <button
           type="submit"

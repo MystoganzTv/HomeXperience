@@ -81,6 +81,9 @@ export default async function PropertiesPage() {
 
   const properties = Array.from(propertyMap.entries()).map(([name, value]) => ({
     name,
+    countryCode:
+      propertyDefinitions.find((propertyDefinition) => propertyDefinition.name === name)?.countryCode ??
+      userSettings.primaryCountryCode,
     units: Array.from(value.units).sort((left, right) => left.localeCompare(right)),
     bookings: value.bookings,
     revenue: value.revenue,
@@ -93,6 +96,7 @@ export default async function PropertiesPage() {
     if (!propertyMap.has(propertyDefinition.name)) {
       properties.push({
         name: propertyDefinition.name,
+        countryCode: propertyDefinition.countryCode,
         units: propertyDefinition.units.map((unit) => unit.name),
         bookings: 0,
         revenue: 0,
@@ -173,7 +177,7 @@ export default async function PropertiesPage() {
           </SectionCard>
           <SectionCard title="How to use it">
             <p className="text-sm leading-6 text-[var(--workspace-muted)]">
-              Imports are assigned to the property you choose during upload. Single-home rentals can stay without units, while multi-unit properties can be expanded later.
+              Imports are assigned to the property you choose during upload. Each property also keeps its own market, so USA, Spain, and UK reporting can live in the same Hostlyx account.
             </p>
           </SectionCard>
         </div>
@@ -189,7 +193,6 @@ export default async function PropertiesPage() {
           <PropertiesManager
             properties={propertyDefinitions}
             summaries={properties}
-            currencyCode={userSettings.currencyCode}
           />
         </SectionCard>
       </div>

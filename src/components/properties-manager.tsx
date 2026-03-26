@@ -2,14 +2,16 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Edit3, House, Layers3, Plus, Trash2 } from "lucide-react";
+import { Building2, Edit3, Globe2, House, Layers3, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { formatCurrency, formatNumber } from "@/lib/format";
-import type { CurrencyCode, PropertyDefinition } from "@/lib/types";
+import { getCurrencyForCountry, getMarketDefinition, marketDefinitions } from "@/lib/markets";
+import type { CountryCode, PropertyDefinition } from "@/lib/types";
 
 type PropertySummary = {
   id?: number;
   name: string;
+  countryCode: CountryCode;
   units: string[];
   bookings: number;
   expenses: number;
@@ -24,21 +26,21 @@ function inputClassName() {
 export function PropertiesManager({
   properties,
   summaries,
-  currencyCode,
 }: {
   properties: PropertyDefinition[];
   summaries: PropertySummary[];
-  currencyCode: CurrencyCode;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [propertyName, setPropertyName] = useState("");
+  const [propertyCountryCode, setPropertyCountryCode] = useState<CountryCode>("US");
   const [propertyMode, setPropertyMode] = useState<"single" | "multi">("single");
   const [unitCount, setUnitCount] = useState("2");
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
   const [editingProperty, setEditingProperty] = useState<PropertySummary | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<PropertySummary | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState("");
+  const [editingPropertyCountryCode, setEditingPropertyCountryCode] = useState<CountryCode>("US");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +67,7 @@ export function PropertiesManager({
 
           const formData = new FormData();
           formData.set("name", normalizedName);
+          formData.set("countryCode", propertyCountryCode);
 
           const response = await fetch("/api/properties", {
             method: "POST",
@@ -99,6 +102,7 @@ export function PropertiesManager({
           }
 
           setPropertyName("");
+          setPropertyCountryCode("US");
           setPropertyMode("single");
           setUnitCount("2");
           setMessage(
@@ -149,6 +153,7 @@ export function PropertiesManager({
   function openEditProperty(summary: PropertySummary) {
     setEditingProperty(summary);
     setEditingPropertyName(summary.name);
+    setEditingPropertyCountryCode(summary.countryCode);
     setMessage(null);
     setError(null);
   }
@@ -168,6 +173,7 @@ export function PropertiesManager({
         try {
           const formData = new FormData();
           formData.set("name", editingPropertyName);
+          formData.set("countryCode", editingPropertyCountryCode);
 
           const response = await fetch(`/api/properties/${editingProperty.id}`, {
             method: "PATCH",
@@ -183,6 +189,7 @@ export function PropertiesManager({
           setMessage(payload.message ?? "Property updated.");
           setEditingProperty(null);
           setEditingPropertyName("");
+          setEditingPropertyCountryCode("US");
           router.refresh();
         } catch {
           setError("The property could not be updated.");
@@ -250,6 +257,38 @@ export function PropertiesManager({
               onChange={(event) => setPropertyName(event.target.value)}
               placeholder="Villa Sol, PinarSabroso, Downtown Lofts..."
             />
+
+            <div className="space-y-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Market
+              </span>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {marketDefinitions.map((market) => {
+                  const isSelected = propertyCountryCode === market.countryCode;
+
+                  return (
+                    <button
+                      key={market.countryCode}
+                      type="button"
+                      onClick={() => setPropertyCountryCode(market.countryCode)}
+                      className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                        isSelected
+                          ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)]"
+                          : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Globe2 className="h-4 w-4" />
+                        <span className="text-sm font-semibold">{market.shortLabel}</span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5">
+                        {market.countryName} • {market.currencyCode}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <button
@@ -356,6 +395,8 @@ export function PropertiesManager({
             ...summary,
             id: propertyId,
           };
+          const market = getMarketDefinition(summary.countryCode);
+          const propertyCurrencyCode = getCurrencyForCountry(summary.countryCode);
 
           return (
             <article
@@ -366,9 +407,10 @@ export function PropertiesManager({
                 <div>
                   <p className="text-lg font-semibold text-[var(--workspace-text)]">{summary.name}</p>
                   <p className="mt-1 text-sm text-[var(--workspace-muted)]">
+                    {market.countryName}
                     {summary.units.length > 0
-                      ? `${formatNumber(summary.units.length)} saved units`
-                      : "No units yet"}
+                      ? ` • ${formatNumber(summary.units.length)} saved units`
+                      : " • No units yet"}
                   </p>
                 </div>
                 <div className="workspace-icon-chip rounded-2xl p-3">
@@ -407,19 +449,19 @@ export function PropertiesManager({
                 <div className="workspace-soft-card rounded-2xl px-4 py-3">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Expenses</p>
                   <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
-                    {formatCurrency(summary.expenses, false, currencyCode)}
+                    {formatCurrency(summary.expenses, false, propertyCurrencyCode)}
                   </p>
                 </div>
                 <div className="workspace-soft-card rounded-2xl px-4 py-3">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Payout</p>
                   <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
-                    {formatCurrency(summary.payout, false, currencyCode)}
+                    {formatCurrency(summary.payout, false, propertyCurrencyCode)}
                   </p>
                 </div>
                 <div className="workspace-soft-card rounded-2xl px-4 py-3">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Profit</p>
                   <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
-                    {formatCurrency(summary.profit, false, currencyCode)}
+                    {formatCurrency(summary.profit, false, propertyCurrencyCode)}
                   </p>
                 </div>
               </div>
@@ -476,6 +518,7 @@ export function PropertiesManager({
         onClose={() => {
           setEditingProperty(null);
           setEditingPropertyName("");
+          setEditingPropertyCountryCode("US");
         }}
       >
         {editingProperty ? (
@@ -493,8 +536,40 @@ export function PropertiesManager({
               />
             </label>
 
+            <div className="space-y-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Market
+              </span>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {marketDefinitions.map((market) => {
+                  const isSelected = editingPropertyCountryCode === market.countryCode;
+
+                  return (
+                    <button
+                      key={market.countryCode}
+                      type="button"
+                      onClick={() => setEditingPropertyCountryCode(market.countryCode)}
+                      className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                        isSelected
+                          ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)]"
+                          : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Globe2 className="h-4 w-4" />
+                        <span className="text-sm font-semibold">{market.shortLabel}</span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5">
+                        {market.countryName} • {market.currencyCode}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
-              Renaming a property updates the property name across existing bookings and expenses in this workspace.
+              Renaming a property updates the property name across existing bookings and expenses in this workspace. Changing the market also moves all linked reporting for this property to the new country and currency.
             </div>
 
             <button
@@ -531,7 +606,11 @@ export function PropertiesManager({
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Expenses</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
-                  {formatCurrency(propertyToDelete.expenses, false, currencyCode)}
+                  {formatCurrency(
+                    propertyToDelete.expenses,
+                    false,
+                    getCurrencyForCountry(propertyToDelete.countryCode),
+                  )}
                 </p>
               </div>
               <div>

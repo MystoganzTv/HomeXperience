@@ -38,11 +38,19 @@ export default async function DashboardPage({
   const latestImport = await getLatestImport(ownerEmail);
   const userSettings = await getUserSettings(ownerEmail, userName);
   const resolvedSearchParams = await searchParams;
-  const filters = getDashboardFilters(resolvedSearchParams, bookings, expenses);
+  const filters = getDashboardFilters(
+    resolvedSearchParams,
+    bookings,
+    expenses,
+    properties,
+    userSettings.primaryCountryCode,
+  );
   const view = buildDashboardView({
     bookings,
     expenses,
     filters,
+    properties,
+    fallbackCountryCode: userSettings.primaryCountryCode,
   });
 
   return (
@@ -52,7 +60,7 @@ export default async function DashboardPage({
       userName={userName}
       userEmail={ownerEmail}
       businessName={userSettings.businessName}
-      currencyCode={userSettings.currencyCode}
+      currencyCode={view.displayCurrencyCode}
       properties={properties}
     />
   );

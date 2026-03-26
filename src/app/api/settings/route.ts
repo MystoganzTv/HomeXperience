@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
 import { upsertUserSettings } from "@/lib/db";
+import { normalizeCountryCode } from "@/lib/markets";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,9 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const businessName = String(formData.get("businessName") ?? "").trim();
-    const currencyCode = String(formData.get("currencyCode") ?? "USD").trim();
+    const primaryCountryCode = normalizeCountryCode(
+      String(formData.get("primaryCountryCode") ?? "US").trim(),
+    );
 
     if (!businessName) {
       return NextResponse.json(
@@ -23,17 +26,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (currencyCode !== "USD" && currencyCode !== "EUR") {
-      return NextResponse.json(
-        { error: "Currency must be USD or EUR." },
-        { status: 400 },
-      );
-    }
-
     await upsertUserSettings({
       ownerEmail,
       businessName,
-      currencyCode,
+      primaryCountryCode,
     });
 
     return NextResponse.json({

@@ -1,5 +1,6 @@
 export type ImportSource = "demo" | "upload" | "manual";
-export type CurrencyCode = "USD" | "EUR";
+export type CurrencyCode = "USD" | "EUR" | "GBP";
+export type CountryCode = "US" | "ES" | "GB";
 
 export type BookingRecord = {
   id?: number;
@@ -48,6 +49,7 @@ export type ImportSummary = {
 
 export type UserSettings = {
   businessName: string;
+  primaryCountryCode: CountryCode;
   currencyCode: CurrencyCode;
 };
 
@@ -59,6 +61,7 @@ export type PropertyUnit = {
 export type PropertyDefinition = {
   id?: number;
   name: string;
+  countryCode: CountryCode;
   units: PropertyUnit[];
 };
 
@@ -66,6 +69,7 @@ export type DashboardFilters = {
   year: number | "all";
   month: number | "all";
   channel: string | "all";
+  countryCode: CountryCode | "all";
 };
 
 export type MetricCard = {
@@ -99,7 +103,10 @@ export type ChannelPoint = {
 export type DashboardView = {
   availableYears: number[];
   availableChannels: string[];
+  availableCountries: CountryCode[];
   filters: DashboardFilters;
+  displayCurrencyCode: CurrencyCode;
+  mixedCurrencyMode: boolean;
   metrics: {
     grossRevenue: number;
     netPayout: number;

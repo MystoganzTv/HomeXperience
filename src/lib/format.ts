@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 import type { CurrencyCode } from "./types";
+import { getLocaleForCurrency } from "./markets";
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -10,7 +11,7 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 const numberFormatter = new Intl.NumberFormat("en-US");
 
 function getCurrencyFormatter(currencyCode: CurrencyCode, precise: boolean) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(getLocaleForCurrency(currencyCode), {
     style: "currency",
     currency: currencyCode,
     minimumFractionDigits: precise ? 0 : 0,

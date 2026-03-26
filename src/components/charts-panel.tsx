@@ -16,12 +16,13 @@ import {
 } from "recharts";
 import type { CategoryPoint, ChannelPoint, CurrencyCode, MonthlyPoint } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
+import { getLocaleForCurrency } from "@/lib/markets";
 import { SectionCard } from "./section-card";
 
 const pieColors = ["#58c4b6", "#7a94d6", "#7ccf99", "#f2b26b", "#ec8f96", "#8d81d9"];
 
 function compactCurrency(value: number, currencyCode: CurrencyCode) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(getLocaleForCurrency(currencyCode), {
     notation: "compact",
     compactDisplay: "short",
     style: "currency",

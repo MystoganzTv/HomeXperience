@@ -17,6 +17,7 @@ import type {
   PropertyDefinition,
 } from "@/lib/types";
 import { formatCurrency, formatDateLabel, formatNumber, formatPercent } from "@/lib/format";
+import { getMarketDefinition } from "@/lib/markets";
 import { ChartsPanel } from "@/components/charts-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { ManualEntryPanel } from "@/components/manual-entry-panel";
@@ -154,11 +155,21 @@ export function DashboardShell({
             <FilterBar
               years={view.availableYears}
               channels={view.availableChannels}
+              countries={view.availableCountries}
               selectedYear={view.filters.year}
               selectedMonth={view.filters.month}
               selectedChannel={view.filters.channel}
+              selectedCountryCode={view.filters.countryCode}
             />
           </div>
+
+          {view.mixedCurrencyMode ? (
+            <div className="workspace-soft-card rounded-[22px] px-4 py-3 text-sm text-[var(--workspace-muted)]">
+              Totals currently mix several countries and are shown in your primary reporting market. Switch to{" "}
+              {view.availableCountries.map((countryCode) => getMarketDefinition(countryCode).shortLabel).join(", ")}{" "}
+              for single-currency reporting.
+            </div>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {metricCards.map((card) => (

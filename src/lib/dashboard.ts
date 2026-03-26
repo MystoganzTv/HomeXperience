@@ -7,12 +7,15 @@ import {
   startOfMonth,
   startOfYear,
 } from "date-fns";
+import { getCurrencyForCountry, normalizeCountryCode } from "./markets";
 import type {
   BookingRecord,
+  CountryCode,
   DashboardFilters,
   DashboardView,
   ExpenseRecord,
   MonthlyPoint,
+  PropertyDefinition,
 } from "./types";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -26,6 +29,26 @@ function matchesDateFilter(dateValue: string, year: number | "all", month: numbe
   const yearMatches = year === "all" || date.getFullYear() === year;
   const monthMatches = month === "all" || date.getMonth() + 1 === month;
   return yearMatches && monthMatches;
+}
+
+function createPropertyCountryMap(
+  properties: PropertyDefinition[],
+  fallbackCountryCode: CountryCode,
+) {
+  return new Map(
+    properties.map((property) => [
+      property.name.trim().toLowerCase(),
+      normalizeCountryCode(property.countryCode ?? fallbackCountryCode),
+    ]),
+  );
+}
+
+function resolveRecordCountryCode(
+  propertyName: string,
+  propertyCountryMap: Map<string, CountryCode>,
+  fallbackCountryCode: CountryCode,
+) {
+  return propertyCountryMap.get(propertyName.trim().toLowerCase()) ?? fallbackCountryCode;
 }
 
 function getRangeFromFilters(
@@ -109,26 +132,24 @@ export function getDashboardFilters(
   searchParams: SearchParams,
   bookings: BookingRecord[],
   expenses: ExpenseRecord[],
+  properties: PropertyDefinition[],
+  fallbackCountryCode: CountryCode,
 ): DashboardFilters {
   const years = Array.from(
     new Set(
-      [...bookings.map((booking) => parseISO(booking.checkIn).getFullYear()), ...expenses.map((expense) => parseISO(expense.date).getFullYear())].filter(
-        (year) => !Number.isNaN(year),
-      ),
+      [
+        ...bookings.map((booking) => parseISO(booking.checkIn).getFullYear()),
+        ...expenses.map((expense) => parseISO(expense.date).getFullYear()),
+      ].filter((year) => !Number.isNaN(year)),
     ),
   ).sort((a, b) => b - a);
 
   const defaultYear = years[0] ?? new Date().getFullYear();
 
-  const yearParam = Array.isArray(searchParams.year)
-    ? searchParams.year[0]
-    : searchParams.year;
-  const monthParam = Array.isArray(searchParams.month)
-    ? searchParams.month[0]
-    : searchParams.month;
-  const channelParam = Array.isArray(searchParams.channel)
-    ? searchParams.channel[0]
-    : searchParams.channel;
+  const yearParam = Array.isArray(searchParams.year) ? searchParams.year[0] : searchParams.year;
+  const monthParam = Array.isArray(searchParams.month) ? searchParams.month[0] : searchParams.month;
+  const channelParam = Array.isArray(searchParams.channel) ? searchParams.channel[0] : searchParams.channel;
+  const countryParam = Array.isArray(searchParams.country) ? searchParams.country[0] : searchParams.country;
 
   const year =
     yearParam === "all"
@@ -143,10 +164,18 @@ export function getDashboardFilters(
         ? Number(monthParam)
         : "all";
 
+  const availableCountries = Array.from(
+    new Set(properties.map((property) => normalizeCountryCode(property.countryCode ?? fallbackCountryCode))),
+  );
+  const defaultCountry = availableCountries[0] ?? fallbackCountryCode;
+  const normalizedCountryCode =
+    countryParam === "all" ? "all" : normalizeCountryCode(countryParam ?? defaultCountry);
+
   return {
     year,
     month: month !== "all" && (month < 1 || month > 12) ? "all" : month,
     channel: channelParam?.trim() ? channelParam : "all",
+    countryCode: normalizedCountryCode,
   };
 }
 
@@ -154,33 +183,65 @@ export function buildDashboardView({
   bookings,
   expenses,
   filters,
+  properties,
+  fallbackCountryCode,
 }: {
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
   filters: DashboardFilters;
+  properties: PropertyDefinition[];
+  fallbackCountryCode: CountryCode;
 }): DashboardView {
+  const propertyCountryMap = createPropertyCountryMap(properties, fallbackCountryCode);
   const availableYears = Array.from(
     new Set(
-      [...bookings.map((booking) => parseISO(booking.checkIn).getFullYear()), ...expenses.map((expense) => parseISO(expense.date).getFullYear())].filter(
-        (year) => !Number.isNaN(year),
-      ),
+      [
+        ...bookings.map((booking) => parseISO(booking.checkIn).getFullYear()),
+        ...expenses.map((expense) => parseISO(expense.date).getFullYear()),
+      ].filter((year) => !Number.isNaN(year)),
     ),
   ).sort((a, b) => b - a);
 
-  const availableChannels = Array.from(
-    new Set(bookings.map((booking) => booking.channel)),
-  ).sort((a, b) => a.localeCompare(b));
+  const availableChannels = Array.from(new Set(bookings.map((booking) => booking.channel))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const availableCountries = Array.from(
+    new Set(
+      properties.map((property) =>
+        normalizeCountryCode(property.countryCode ?? fallbackCountryCode),
+      ),
+    ),
+  );
 
-  const dateFilteredBookings = bookings.filter((booking) =>
+  const countryFilteredBookings = bookings.filter((booking) => {
+    const countryCode = resolveRecordCountryCode(
+      booking.propertyName,
+      propertyCountryMap,
+      fallbackCountryCode,
+    );
+
+    return filters.countryCode === "all" || countryCode === filters.countryCode;
+  });
+
+  const countryFilteredExpenses = expenses.filter((expense) => {
+    const countryCode = resolveRecordCountryCode(
+      expense.propertyName,
+      propertyCountryMap,
+      fallbackCountryCode,
+    );
+
+    return filters.countryCode === "all" || countryCode === filters.countryCode;
+  });
+
+  const dateFilteredBookings = countryFilteredBookings.filter((booking) =>
     matchesDateFilter(booking.checkIn, filters.year, filters.month),
   );
 
   const filteredBookings = dateFilteredBookings.filter(
-    (booking) =>
-      filters.channel === "all" || booking.channel === filters.channel,
+    (booking) => filters.channel === "all" || booking.channel === filters.channel,
   );
 
-  const filteredExpenses = expenses.filter((expense) =>
+  const filteredExpenses = countryFilteredExpenses.filter((expense) =>
     matchesDateFilter(expense.date, filters.year, filters.month),
   );
 
@@ -192,13 +253,13 @@ export function buildDashboardView({
   const bookingsCount = filteredBookings.length;
   const rentalRevenue = sum(filteredBookings.map((booking) => booking.rentalRevenue));
 
-  const { start, end } = getRangeFromFilters(filters, bookings, expenses);
+  const { start, end } = getRangeFromFilters(filters, countryFilteredBookings, countryFilteredExpenses);
   const availableNights = Math.max(
     1,
     Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
   );
 
-  const buckets = buildMonthlyBuckets(filters, bookings, expenses);
+  const buckets = buildMonthlyBuckets(filters, countryFilteredBookings, countryFilteredExpenses);
 
   for (const booking of filteredBookings) {
     const bucketIndex = getMonthIndex(booking.checkIn, buckets, filters);
@@ -242,10 +303,16 @@ export function buildDashboardView({
     });
   }
 
+  const displayCountryCode =
+    filters.countryCode === "all" ? fallbackCountryCode : filters.countryCode;
+
   return {
     availableYears,
     availableChannels,
+    availableCountries,
     filters,
+    displayCurrencyCode: getCurrencyForCountry(displayCountryCode),
+    mixedCurrencyMode: filters.countryCode === "all" && availableCountries.length > 1,
     metrics: {
       grossRevenue,
       netPayout,
@@ -258,24 +325,24 @@ export function buildDashboardView({
       occupancyRate: clampRatio(nightsBooked / availableNights),
       revPar: availableNights > 0 ? rentalRevenue / availableNights : 0,
     },
-    revenueByMonth: buckets,
-    profitByMonth: buckets,
+    revenueByMonth: buckets.map((bucket) => ({ ...bucket })),
+    profitByMonth: buckets.map((bucket) => ({ ...bucket })),
     expensesByCategory: Array.from(expensesByCategoryMap.entries())
       .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value),
+      .sort((left, right) => right.value - left.value),
     revenueByChannel: Array.from(revenueByChannelMap.entries())
       .map(([label, value]) => ({
         label,
         revenue: value.revenue,
         bookings: value.bookings,
       }))
-      .sort((a, b) => b.revenue - a.revenue),
+      .sort((left, right) => right.revenue - left.revenue),
     recentBookings: [...filteredBookings]
-      .sort((a, b) => b.checkIn.localeCompare(a.checkIn))
+      .sort((left, right) => right.checkIn.localeCompare(left.checkIn))
       .slice(0, 6),
     recentExpenses: [...filteredExpenses]
-      .sort((a, b) => b.date.localeCompare(a.date))
+      .sort((left, right) => right.date.localeCompare(left.date))
       .slice(0, 6),
-    monthlySummary: buckets,
+    monthlySummary: buckets.map((bucket) => ({ ...bucket })),
   };
 }
