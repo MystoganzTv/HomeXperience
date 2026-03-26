@@ -5,6 +5,8 @@ export type BookingRecord = {
   id?: number;
   importId?: number;
   source?: ImportSource;
+  propertyName: string;
+  unitName: string;
   checkIn: string;
   checkout: string;
   guestName: string;
@@ -26,6 +28,8 @@ export type ExpenseRecord = {
   id?: number;
   importId?: number;
   source?: ImportSource;
+  propertyName: string;
+  unitName: string;
   date: string;
   category: string;
   amount: number;

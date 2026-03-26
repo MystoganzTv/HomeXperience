@@ -247,6 +247,8 @@ export function parseWorkbook(buffer: ArrayBuffer) {
       );
 
       return {
+        propertyName: "Default Property",
+        unitName: "",
         checkIn,
         checkout,
         guestName: String(row[bookingIndexes.guestName] ?? "").trim() || "Guest",
@@ -273,6 +275,8 @@ export function parseWorkbook(buffer: ArrayBuffer) {
     .slice(expenseHeaderRowIndex + 1)
     .filter((row) => !rowIsEmpty(row))
     .map((row) => ({
+      propertyName: "Default Property",
+      unitName: "",
       date: parseExcelDate(row[expenseIndexes.date]),
       category: String(row[expenseIndexes.category] ?? "").trim() || "Other",
       amount: parseCurrency(row[expenseIndexes.amount]),

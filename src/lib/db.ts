@@ -137,6 +137,8 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       owner_email TEXT NOT NULL DEFAULT 'legacy',
       import_id INTEGER NOT NULL,
       source TEXT NOT NULL DEFAULT 'upload',
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      unit_name TEXT NOT NULL DEFAULT '',
       check_in TEXT NOT NULL,
       checkout TEXT NOT NULL,
       guest_name TEXT NOT NULL,
@@ -159,6 +161,8 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       owner_email TEXT NOT NULL DEFAULT 'legacy',
       import_id INTEGER NOT NULL,
       source TEXT NOT NULL DEFAULT 'upload',
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      unit_name TEXT NOT NULL DEFAULT '',
       date TEXT NOT NULL,
       category TEXT NOT NULL,
       amount REAL NOT NULL,
@@ -191,12 +195,28 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE bookings ADD COLUMN source TEXT NOT NULL DEFAULT 'upload';");
   }
 
+  if (!hasColumn(db, "bookings", "property_name")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "bookings", "unit_name")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
+  }
+
   if (!hasColumn(db, "expenses", "owner_email")) {
     db.exec("ALTER TABLE expenses ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
   }
 
   if (!hasColumn(db, "expenses", "source")) {
     db.exec("ALTER TABLE expenses ADD COLUMN source TEXT NOT NULL DEFAULT 'upload';");
+  }
+
+  if (!hasColumn(db, "expenses", "property_name")) {
+    db.exec("ALTER TABLE expenses ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "expenses", "unit_name")) {
+    db.exec("ALTER TABLE expenses ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
   }
 }
 
@@ -250,6 +270,8 @@ async function initializePostgresSchema() {
           owner_email TEXT NOT NULL,
           import_id BIGINT NOT NULL DEFAULT 0,
           source TEXT NOT NULL DEFAULT 'upload',
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
+          unit_name TEXT NOT NULL DEFAULT '',
           check_in TEXT NOT NULL,
           checkout TEXT NOT NULL,
           guest_name TEXT NOT NULL,
@@ -272,6 +294,8 @@ async function initializePostgresSchema() {
           owner_email TEXT NOT NULL,
           import_id BIGINT NOT NULL DEFAULT 0,
           source TEXT NOT NULL DEFAULT 'upload',
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
+          unit_name TEXT NOT NULL DEFAULT '',
           date TEXT NOT NULL,
           category TEXT NOT NULL,
           amount DOUBLE PRECISION NOT NULL,
@@ -290,6 +314,23 @@ async function initializePostgresSchema() {
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_check_in ON bookings(owner_email, check_in);
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
+      `);
+
+      await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE expenses
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE expenses
+        ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
       `);
     })();
   }
@@ -332,6 +373,8 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     id: Number(getRowValue(row, "id")),
     importId: Number(getRowValue(row, "importId", "importid")),
     source: String(getRowValue(row, "source")) as ImportSource,
+    propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    unitName: String(getRowValue(row, "unitName", "unitname")),
     checkIn: String(getRowValue(row, "checkIn", "checkin")),
     checkout: String(getRowValue(row, "checkout")),
     guestName: String(getRowValue(row, "guestName", "guestname")),
@@ -355,6 +398,8 @@ function mapExpenseRecord(row: Record<string, unknown>): ExpenseRecord {
     id: Number(getRowValue(row, "id")),
     importId: Number(getRowValue(row, "importId", "importid")),
     source: String(getRowValue(row, "source")) as ImportSource,
+    propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    unitName: String(getRowValue(row, "unitName", "unitname")),
     date: String(getRowValue(row, "date")),
     category: String(getRowValue(row, "category")),
     amount: Number(getRowValue(row, "amount")),
@@ -389,6 +434,8 @@ function cloneBookingRecord(booking: StoredBooking): BookingRecord {
     id: booking.id,
     importId: booking.importId,
     source: booking.source,
+    propertyName: booking.propertyName,
+    unitName: booking.unitName,
     checkIn: booking.checkIn,
     checkout: booking.checkout,
     guestName: booking.guestName,
@@ -412,6 +459,8 @@ function cloneExpenseRecord(expense: StoredExpense): ExpenseRecord {
     id: expense.id,
     importId: expense.importId,
     source: expense.source,
+    propertyName: expense.propertyName,
+    unitName: expense.unitName,
     date: expense.date,
     category: expense.category,
     amount: expense.amount,
@@ -437,6 +486,8 @@ function formatFingerprintNumber(value: number) {
 
 function createBookingFingerprint(booking: BookingRecord) {
   return [
+    normalizeFingerprintValue(booking.propertyName),
+    normalizeFingerprintValue(booking.unitName),
     booking.checkIn,
     booking.checkout,
     normalizeFingerprintValue(booking.guestName),
@@ -457,6 +508,8 @@ function createBookingFingerprint(booking: BookingRecord) {
 
 function createExpenseFingerprint(expense: ExpenseRecord) {
   return [
+    normalizeFingerprintValue(expense.propertyName),
+    normalizeFingerprintValue(expense.unitName),
     expense.date,
     normalizeFingerprintValue(expense.category),
     formatFingerprintNumber(expense.amount),
@@ -500,6 +553,8 @@ export async function appendImportData({
       const existingBookings = await client.query(
         `
           SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
             check_in AS checkIn,
             checkout,
             guest_name AS guestName,
@@ -523,6 +578,8 @@ export async function appendImportData({
       const existingExpenses = await client.query(
         `
           SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
             date,
             category,
             amount,
@@ -584,16 +641,18 @@ export async function appendImportData({
         await client.query(
           `
             INSERT INTO bookings (
-              owner_email, import_id, source, check_in, checkout, guest_name, guest_count,
+              owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
               channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
               cleaning_fee, total_revenue, host_fee, payout, nights
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
           `,
           [
             normalizedEmail,
             importId,
             source,
+            booking.propertyName,
+            booking.unitName,
             booking.checkIn,
             booking.checkout,
             booking.guestName,
@@ -617,14 +676,16 @@ export async function appendImportData({
         await client.query(
           `
             INSERT INTO expenses (
-              owner_email, import_id, source, date, category, amount, description, note
+              owner_email, import_id, source, property_name, unit_name, date, category, amount, description, note
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           `,
           [
             normalizedEmail,
             importId,
             source,
+            expense.propertyName,
+            expense.unitName,
             expense.date,
             expense.category,
             expense.amount,
@@ -733,6 +794,8 @@ export async function appendImportData({
       .prepare(
         `
           SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
             check_in AS checkIn,
             checkout,
             guest_name AS guestName,
@@ -759,6 +822,8 @@ export async function appendImportData({
       .prepare(
         `
           SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
             date,
             category,
             amount,
@@ -814,18 +879,18 @@ export async function appendImportData({
 
     const insertBooking = db.prepare(`
       INSERT INTO bookings (
-        owner_email, import_id, source, check_in, checkout, guest_name, guest_count,
+        owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
         channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
         cleaning_fee, total_revenue, host_fee, payout, nights
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertExpense = db.prepare(`
       INSERT INTO expenses (
-        owner_email, import_id, source, date, category, amount, description, note
+        owner_email, import_id, source, property_name, unit_name, date, category, amount, description, note
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const booking of freshBookings) {
@@ -833,6 +898,8 @@ export async function appendImportData({
         normalizedEmail,
         importId,
         source,
+        booking.propertyName,
+        booking.unitName,
         booking.checkIn,
         booking.checkout,
         booking.guestName,
@@ -856,6 +923,8 @@ export async function appendImportData({
         normalizedEmail,
         importId,
         source,
+        expense.propertyName,
+        expense.unitName,
         expense.date,
         expense.category,
         expense.amount,
@@ -946,6 +1015,8 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           id,
           import_id AS importId,
           source,
+          property_name AS propertyName,
+          unit_name AS unitName,
           check_in AS checkIn,
           checkout,
           guest_name AS guestName,
@@ -988,6 +1059,8 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           id,
           import_id AS importId,
           source,
+          property_name AS propertyName,
+          unit_name AS unitName,
           check_in AS checkIn,
           checkout,
           guest_name AS guestName,
@@ -1024,6 +1097,8 @@ export async function getExpenses(ownerEmail: string): Promise<ExpenseRecord[]> 
           id,
           import_id AS importId,
           source,
+          property_name AS propertyName,
+          unit_name AS unitName,
           date,
           category,
           amount,
@@ -1056,6 +1131,8 @@ export async function getExpenses(ownerEmail: string): Promise<ExpenseRecord[]> 
           id,
           import_id AS importId,
           source,
+          property_name AS propertyName,
+          unit_name AS unitName,
           date,
           category,
           amount,
@@ -1085,15 +1162,17 @@ export async function insertManualBooking({
     const result = await pool.query(
       `
         INSERT INTO bookings (
-          owner_email, import_id, source, check_in, checkout, guest_name, guest_count,
+          owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
           cleaning_fee, total_revenue, host_fee, payout, nights
         )
-        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING id
       `,
       [
         normalizedEmail,
+        booking.propertyName,
+        booking.unitName,
         booking.checkIn,
         booking.checkout,
         booking.guestName,
@@ -1135,15 +1214,17 @@ export async function insertManualBooking({
     .prepare(
       `
         INSERT INTO bookings (
-          owner_email, import_id, source, check_in, checkout, guest_name, guest_count,
+          owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
           cleaning_fee, total_revenue, host_fee, payout, nights
         )
-        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
       normalizedEmail,
+      booking.propertyName,
+      booking.unitName,
       booking.checkIn,
       booking.checkout,
       booking.guestName,
@@ -1179,13 +1260,15 @@ export async function insertManualExpense({
     const result = await pool.query(
       `
         INSERT INTO expenses (
-          owner_email, import_id, source, date, category, amount, description, note
+          owner_email, import_id, source, property_name, unit_name, date, category, amount, description, note
         )
-        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6)
+        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8)
         RETURNING id
       `,
       [
         normalizedEmail,
+        expense.propertyName,
+        expense.unitName,
         expense.date,
         expense.category,
         expense.amount,
@@ -1217,13 +1300,15 @@ export async function insertManualExpense({
     .prepare(
       `
         INSERT INTO expenses (
-          owner_email, import_id, source, date, category, amount, description, note
+          owner_email, import_id, source, property_name, unit_name, date, category, amount, description, note
         )
-        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?)
+        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
       normalizedEmail,
+      expense.propertyName,
+      expense.unitName,
       expense.date,
       expense.category,
       expense.amount,
@@ -1232,6 +1317,308 @@ export async function insertManualExpense({
     );
 
   return Number(result.lastInsertRowid);
+}
+
+export async function updateBookingRecord({
+  ownerEmail,
+  bookingId,
+  booking,
+}: {
+  ownerEmail: string;
+  bookingId: number;
+  booking: BookingRecord;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        UPDATE bookings
+        SET
+          property_name = $3,
+          unit_name = $4,
+          check_in = $5,
+          checkout = $6,
+          guest_name = $7,
+          guest_count = $8,
+          channel = $9,
+          rental_period = $10,
+          price_per_night = $11,
+          extra_fee = $12,
+          discount = $13,
+          rental_revenue = $14,
+          cleaning_fee = $15,
+          total_revenue = $16,
+          host_fee = $17,
+          payout = $18,
+          nights = $19
+        WHERE id = $1 AND owner_email = $2
+      `,
+      [
+        bookingId,
+        normalizedEmail,
+        booking.propertyName,
+        booking.unitName,
+        booking.checkIn,
+        booking.checkout,
+        booking.guestName,
+        booking.guestCount,
+        booking.channel,
+        booking.rentalPeriod,
+        booking.pricePerNight,
+        booking.extraFee,
+        booking.discount,
+        booking.rentalRevenue,
+        booking.cleaningFee,
+        booking.totalRevenue,
+        booking.hostFee,
+        booking.payout,
+        booking.nights,
+      ],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const index = store.bookings.findIndex(
+      (entry) => entry.id === bookingId && entry.ownerEmail === normalizedEmail,
+    );
+
+    if (index < 0) {
+      return false;
+    }
+
+    store.bookings[index] = {
+      ...store.bookings[index],
+      ...booking,
+      id: store.bookings[index].id,
+      importId: store.bookings[index].importId,
+      ownerEmail: normalizedEmail,
+      source: store.bookings[index].source,
+    };
+
+    return true;
+  }
+
+  const db = getSQLiteDatabase();
+  const result = db.prepare(
+    `
+      UPDATE bookings
+      SET
+        property_name = ?,
+        unit_name = ?,
+        check_in = ?,
+        checkout = ?,
+        guest_name = ?,
+        guest_count = ?,
+        channel = ?,
+        rental_period = ?,
+        price_per_night = ?,
+        extra_fee = ?,
+        discount = ?,
+        rental_revenue = ?,
+        cleaning_fee = ?,
+        total_revenue = ?,
+        host_fee = ?,
+        payout = ?,
+        nights = ?
+      WHERE id = ? AND owner_email = ?
+    `,
+  ).run(
+    booking.propertyName,
+    booking.unitName,
+    booking.checkIn,
+    booking.checkout,
+    booking.guestName,
+    booking.guestCount,
+    booking.channel,
+    booking.rentalPeriod,
+    booking.pricePerNight,
+    booking.extraFee,
+    booking.discount,
+    booking.rentalRevenue,
+    booking.cleaningFee,
+    booking.totalRevenue,
+    booking.hostFee,
+    booking.payout,
+    booking.nights,
+    bookingId,
+    normalizedEmail,
+  );
+
+  return result.changes > 0;
+}
+
+export async function deleteBookingRecord({
+  ownerEmail,
+  bookingId,
+}: {
+  ownerEmail: string;
+  bookingId: number;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      "DELETE FROM bookings WHERE id = $1 AND owner_email = $2",
+      [bookingId, normalizedEmail],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const before = store.bookings.length;
+    store.bookings = store.bookings.filter(
+      (entry) => !(entry.id === bookingId && entry.ownerEmail === normalizedEmail),
+    );
+    return store.bookings.length < before;
+  }
+
+  const db = getSQLiteDatabase();
+  const result = db
+    .prepare("DELETE FROM bookings WHERE id = ? AND owner_email = ?")
+    .run(bookingId, normalizedEmail);
+
+  return result.changes > 0;
+}
+
+export async function updateExpenseRecord({
+  ownerEmail,
+  expenseId,
+  expense,
+}: {
+  ownerEmail: string;
+  expenseId: number;
+  expense: ExpenseRecord;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        UPDATE expenses
+        SET
+          property_name = $3,
+          unit_name = $4,
+          date = $5,
+          category = $6,
+          amount = $7,
+          description = $8,
+          note = $9
+        WHERE id = $1 AND owner_email = $2
+      `,
+      [
+        expenseId,
+        normalizedEmail,
+        expense.propertyName,
+        expense.unitName,
+        expense.date,
+        expense.category,
+        expense.amount,
+        expense.description,
+        expense.note,
+      ],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const index = store.expenses.findIndex(
+      (entry) => entry.id === expenseId && entry.ownerEmail === normalizedEmail,
+    );
+
+    if (index < 0) {
+      return false;
+    }
+
+    store.expenses[index] = {
+      ...store.expenses[index],
+      ...expense,
+      id: store.expenses[index].id,
+      importId: store.expenses[index].importId,
+      ownerEmail: normalizedEmail,
+      source: store.expenses[index].source,
+    };
+
+    return true;
+  }
+
+  const db = getSQLiteDatabase();
+  const result = db.prepare(
+    `
+      UPDATE expenses
+      SET
+        property_name = ?,
+        unit_name = ?,
+        date = ?,
+        category = ?,
+        amount = ?,
+        description = ?,
+        note = ?
+      WHERE id = ? AND owner_email = ?
+    `,
+  ).run(
+    expense.propertyName,
+    expense.unitName,
+    expense.date,
+    expense.category,
+    expense.amount,
+    expense.description,
+    expense.note,
+    expenseId,
+    normalizedEmail,
+  );
+
+  return result.changes > 0;
+}
+
+export async function deleteExpenseRecord({
+  ownerEmail,
+  expenseId,
+}: {
+  ownerEmail: string;
+  expenseId: number;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      "DELETE FROM expenses WHERE id = $1 AND owner_email = $2",
+      [expenseId, normalizedEmail],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const before = store.expenses.length;
+    store.expenses = store.expenses.filter(
+      (entry) => !(entry.id === expenseId && entry.ownerEmail === normalizedEmail),
+    );
+    return store.expenses.length < before;
+  }
+
+  const db = getSQLiteDatabase();
+  const result = db
+    .prepare("DELETE FROM expenses WHERE id = ? AND owner_email = ?")
+    .run(expenseId, normalizedEmail);
+
+  return result.changes > 0;
 }
 
 export async function getUserSettings(

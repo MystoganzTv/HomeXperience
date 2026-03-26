@@ -27,10 +27,12 @@ function ensureDate(value: string, fieldLabel: string) {
 export function normalizeManualBooking(formData: FormData): BookingRecord {
   const checkIn = ensureDate(parseText(formData.get("checkIn")), "check-in date");
   const checkout = ensureDate(parseText(formData.get("checkout")), "checkout date");
-  const nights = Math.max(
-    1,
-    differenceInCalendarDays(parseISO(checkout), parseISO(checkIn)),
-  );
+  const nights = differenceInCalendarDays(parseISO(checkout), parseISO(checkIn));
+
+  if (nights <= 0) {
+    throw new Error("Checkout must be after check-in.");
+  }
+
   const pricePerNight = parseMoney(formData.get("pricePerNight"));
   const extraFee = parseMoney(formData.get("extraFee"));
   const discount = parseMoney(formData.get("discount"));
@@ -44,6 +46,8 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
 
   return {
     source: "manual",
+    propertyName: parseText(formData.get("propertyName")) || "Default Property",
+    unitName: parseText(formData.get("unitName")),
     checkIn,
     checkout,
     guestName: parseText(formData.get("guestName")) || "Guest",
@@ -72,6 +76,8 @@ export function normalizeManualExpense(formData: FormData): ExpenseRecord {
 
   return {
     source: "manual",
+    propertyName: parseText(formData.get("propertyName")) || "Default Property",
+    unitName: parseText(formData.get("unitName")),
     date,
     category: parseText(formData.get("category")) || "Other",
     amount,

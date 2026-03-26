@@ -106,6 +106,18 @@ export function ManualEntryPanel() {
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Property
+              </span>
+              <input className={inputClassName()} type="text" name="propertyName" placeholder="Default Property" />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Unit
+              </span>
+              <input className={inputClassName()} type="text" name="unitName" placeholder="Unit, room, apartment..." />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                 Guest name
               </span>
               <input className={inputClassName()} type="text" name="guestName" placeholder="Guest name" required />
@@ -179,6 +191,18 @@ export function ManualEntryPanel() {
                 Amount
               </span>
               <input className={inputClassName()} type="number" min="0.01" step="0.01" name="amount" required />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Property
+              </span>
+              <input className={inputClassName()} type="text" name="propertyName" placeholder="Default Property" />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Unit
+              </span>
+              <input className={inputClassName()} type="text" name="unitName" placeholder="Unit, room, apartment..." />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">

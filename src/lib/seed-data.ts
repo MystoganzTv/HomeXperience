@@ -1,6 +1,6 @@
 import type { BookingRecord, ExpenseRecord } from "./types";
 
-export const seedBookings: BookingRecord[] = [
+const baseSeedBookings = [
   {
     checkIn: "2025-11-03",
     checkout: "2025-11-08",
@@ -190,7 +190,7 @@ export const seedBookings: BookingRecord[] = [
   },
 ];
 
-export const seedExpenses: ExpenseRecord[] = [
+const baseSeedExpenses = [
   {
     date: "2026-01-04",
     category: "Supplies",
@@ -262,3 +262,15 @@ export const seedExpenses: ExpenseRecord[] = [
     note: "Autumn renewal",
   },
 ];
+
+export const seedBookings: BookingRecord[] = baseSeedBookings.map((booking) => ({
+  propertyName: "Demo Property",
+  unitName: "Main Suite",
+  ...booking,
+}));
+
+export const seedExpenses: ExpenseRecord[] = baseSeedExpenses.map((expense) => ({
+  propertyName: "Demo Property",
+  unitName: "Main Suite",
+  ...expense,
+}));

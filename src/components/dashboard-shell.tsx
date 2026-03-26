@@ -298,7 +298,7 @@ export function DashboardShell({
                         <div>
                           <p className="text-base font-semibold text-white">{booking.guestName}</p>
                           <p className="mt-1 text-sm text-slate-400">
-                            {booking.channel} • {booking.rentalPeriod}
+                            {booking.propertyName}{booking.unitName ? ` • ${booking.unitName}` : ""} • {booking.channel} • {booking.rentalPeriod}
                           </p>
                         </div>
 
@@ -375,7 +375,7 @@ export function DashboardShell({
                         <div>
                           <p className="font-medium text-white">{expense.description}</p>
                           <p className="mt-1 text-sm text-slate-400">
-                            {expense.category} • {formatDateLabel(expense.date)}
+                            {expense.propertyName}{expense.unitName ? ` • ${expense.unitName}` : ""} • {expense.category} • {formatDateLabel(expense.date)}
                           </p>
                         </div>
                         {expense.note ? (

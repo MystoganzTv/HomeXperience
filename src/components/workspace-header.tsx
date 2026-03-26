@@ -19,7 +19,7 @@ export function WorkspaceHeader({
   latestImport,
   actions,
 }: {
-  activePage: "dashboard" | "profile";
+  activePage: "dashboard" | "bookings" | "expenses" | "properties" | "profile";
   businessName: string;
   userName: string;
   userEmail: string;
@@ -58,6 +58,15 @@ export function WorkspaceHeader({
             <nav className="flex flex-wrap gap-3">
               <Link href="/dashboard" className={navClassName(activePage === "dashboard")}>
                 Dashboard
+              </Link>
+              <Link href="/dashboard/bookings" className={navClassName(activePage === "bookings")}>
+                Bookings
+              </Link>
+              <Link href="/dashboard/expenses" className={navClassName(activePage === "expenses")}>
+                Expenses
+              </Link>
+              <Link href="/dashboard/properties" className={navClassName(activePage === "properties")}>
+                Properties
               </Link>
               <Link href="/profile" className={navClassName(activePage === "profile")}>
                 Profile
