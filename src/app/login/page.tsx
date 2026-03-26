@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Building2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, ShieldCheck } from "lucide-react";
 import { SignInButton } from "@/components/auth-buttons";
 import { BrandLogo } from "@/components/brand-logo";
 import { getAuthSession, hasGoogleAuthConfig } from "@/lib/auth";
@@ -50,9 +50,10 @@ export default async function LoginPage() {
             <SignInButton disabled={!hasGoogleAuthConfig} />
             <Link
               href="/"
-              className="inline-flex text-sm font-medium text-slate-400 transition hover:text-slate-100"
+              className="inline-flex w-fit items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/[0.08] hover:text-white"
             >
-              Back to Hostlyx
+              <ArrowLeft className="h-4 w-4" />
+              Back to home
             </Link>
           </div>
 
