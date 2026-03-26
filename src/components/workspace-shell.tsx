@@ -9,7 +9,6 @@ import {
   ChevronsRight,
   DatabaseZap,
   LayoutDashboard,
-  LogOut,
   ReceiptText,
   UserCircle2,
 } from "lucide-react";
@@ -159,28 +158,6 @@ export function WorkspaceShell({
                 <SignOutButton className="flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]" />
               </div>
             ) : null}
-          </div>
-
-          <div className="hidden xl:block">
-            <div className={`flex ${isCollapsed ? "justify-center" : "justify-start"}`}>
-              {isCollapsed ? (
-                <SignOutButton
-                  label=""
-                  ariaLabel="Sign out"
-                  icon={<LogOut className="h-4 w-4" />}
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white transition hover:bg-white/[0.08]"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={toggleSidebar}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                  Collapse
-                </button>
-              )}
-            </div>
           </div>
         </aside>
 
