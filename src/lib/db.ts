@@ -24,6 +24,7 @@ type SQLiteModule = typeof import("better-sqlite3");
 
 type StoredImport = ImportSummary & {
   ownerEmail: string;
+  workbookHash: string;
 };
 
 type StoredBooking = Required<BookingRecord> & {
@@ -162,6 +163,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_email TEXT NOT NULL DEFAULT 'legacy',
       file_name TEXT NOT NULL,
+      workbook_hash TEXT NOT NULL DEFAULT '',
       property_name TEXT NOT NULL DEFAULT 'Default Property',
       source TEXT NOT NULL,
       imported_at TEXT NOT NULL,
@@ -260,6 +262,10 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "imports", "property_name")) {
     db.exec("ALTER TABLE imports ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "imports", "workbook_hash")) {
+    db.exec("ALTER TABLE imports ADD COLUMN workbook_hash TEXT NOT NULL DEFAULT '';");
   }
 
   db.exec(`
@@ -390,6 +396,7 @@ async function initializePostgresSchema() {
           id BIGSERIAL PRIMARY KEY,
           owner_email TEXT NOT NULL,
           file_name TEXT NOT NULL,
+          workbook_hash TEXT NOT NULL DEFAULT '',
           property_name TEXT NOT NULL DEFAULT 'Default Property',
           source TEXT NOT NULL,
           imported_at TIMESTAMPTZ NOT NULL,
@@ -520,6 +527,10 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE bookings
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE imports
+        ADD COLUMN IF NOT EXISTS workbook_hash TEXT NOT NULL DEFAULT ''
       `);
       await pool.query(`
         ALTER TABLE bookings
@@ -969,6 +980,13 @@ type ImportDataResult = {
   skippedClosuresCount: number;
 };
 
+type WorkbookImportMatch = {
+  workbookHash: string;
+  fileName: string;
+  propertyName: string;
+  importedAt: string;
+};
+
 type DeleteImportResult = {
   deletedImportId: number;
   deletedFileName: string;
@@ -980,6 +998,7 @@ type DeleteImportResult = {
 export async function appendImportData({
   ownerEmail,
   fileName,
+  workbookHash,
   propertyName,
   source,
   bookings,
@@ -988,6 +1007,7 @@ export async function appendImportData({
 }: {
   ownerEmail: string;
   fileName: string;
+  workbookHash: string;
   propertyName: string;
   source: ImportSource;
   bookings: BookingRecord[];
@@ -1102,13 +1122,14 @@ export async function appendImportData({
 
       const importResult = await client.query(
         `
-          INSERT INTO imports (owner_email, file_name, property_name, source, imported_at, bookings_count, expenses_count)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO imports (owner_email, file_name, workbook_hash, property_name, source, imported_at, bookings_count, expenses_count)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING id
         `,
         [
           normalizedEmail,
           fileName,
+          workbookHash,
           propertyName,
           source,
           importedAt,
@@ -1273,6 +1294,7 @@ export async function appendImportData({
       id: importId,
       ownerEmail: normalizedEmail,
       fileName,
+      workbookHash,
       propertyName,
       source,
       importedAt,
@@ -1421,13 +1443,14 @@ export async function appendImportData({
     const result = db
       .prepare(
         `
-          INSERT INTO imports (owner_email, file_name, property_name, source, imported_at, bookings_count, expenses_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO imports (owner_email, file_name, workbook_hash, property_name, source, imported_at, bookings_count, expenses_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
         normalizedEmail,
         fileName,
+        workbookHash,
         propertyName,
         source,
         importedAt,
@@ -1641,6 +1664,94 @@ export async function getImportSummaries(ownerEmail: string): Promise<ImportSumm
     )
     .all(normalizedEmail)
     .map((row) => mapImportSummary(row as Record<string, unknown>));
+}
+
+export async function getImportedWorkbookMatches(
+  ownerEmail: string,
+  workbookHashes: string[],
+): Promise<WorkbookImportMatch[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const normalizedHashes = Array.from(
+    new Set(
+      workbookHashes
+        .map((hash) => hash.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  if (normalizedHashes.length === 0) {
+    return [];
+  }
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          workbook_hash AS "workbookHash",
+          file_name AS "fileName",
+          property_name AS "propertyName",
+          imported_at AS "importedAt"
+        FROM imports
+        WHERE owner_email = $1
+          AND workbook_hash = ANY($2::text[])
+      `,
+      [normalizedEmail, normalizedHashes],
+    );
+
+    return result.rows.map((row) => ({
+      workbookHash: String(getRowValue(row as Record<string, unknown>, "workbookHash")),
+      fileName: String(getRowValue(row as Record<string, unknown>, "fileName", "filename")),
+      propertyName:
+        String(getRowValue(row as Record<string, unknown>, "propertyName", "propertyname")) ||
+        "Default Property",
+      importedAt: String(getRowValue(row as Record<string, unknown>, "importedAt", "importedat")),
+    }));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const hashSet = new Set(normalizedHashes);
+
+    return store.imports
+      .filter(
+        (entry) =>
+          entry.ownerEmail === normalizedEmail &&
+          entry.workbookHash &&
+          hashSet.has(entry.workbookHash.toLowerCase()),
+      )
+      .map((entry) => ({
+        workbookHash: entry.workbookHash,
+        fileName: entry.fileName,
+        propertyName: entry.propertyName,
+        importedAt: entry.importedAt,
+      }));
+  }
+
+  const db = getSQLiteDatabase();
+  const placeholders = normalizedHashes.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          workbook_hash AS workbookHash,
+          file_name AS fileName,
+          property_name AS propertyName,
+          imported_at AS importedAt
+        FROM imports
+        WHERE owner_email = ?
+          AND workbook_hash IN (${placeholders})
+      `,
+    )
+    .all(normalizedEmail, ...normalizedHashes) as Record<string, unknown>[];
+
+  return rows.map((row) => ({
+    workbookHash: String(getRowValue(row, "workbookHash", "workbookhash")),
+    fileName: String(getRowValue(row, "fileName", "filename")),
+    propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    importedAt: String(getRowValue(row, "importedAt", "importedat")),
+  }));
 }
 
 export async function deleteImportBatch({

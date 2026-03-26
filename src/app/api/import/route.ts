@@ -1,6 +1,11 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
-import { appendImportData, getPropertyDefinitions } from "@/lib/db";
+import {
+  appendImportData,
+  getImportedWorkbookMatches,
+  getPropertyDefinitions,
+} from "@/lib/db";
 import { parseWorkbook } from "@/lib/workbook";
 
 export const runtime = "nodejs";
@@ -62,7 +67,9 @@ export async function POST(request: Request) {
     let totalSkippedBookings = 0;
     let totalSkippedExpenses = 0;
     let totalSkippedClosures = 0;
+    let totalSkippedWorkbooks = 0;
     const importedFiles: string[] = [];
+    const seenWorkbookHashes = new Set<string>();
 
     for (const file of workbookFiles) {
       if (!file.name.toLowerCase().endsWith(".xlsx")) {
@@ -73,11 +80,29 @@ export async function POST(request: Request) {
       }
 
       const buffer = await file.arrayBuffer();
+      const workbookHash = createHash("sha256")
+        .update(Buffer.from(buffer))
+        .digest("hex");
+
+      if (seenWorkbookHashes.has(workbookHash)) {
+        totalSkippedWorkbooks += 1;
+        continue;
+      }
+
+      seenWorkbookHashes.add(workbookHash);
+      const existingMatches = await getImportedWorkbookMatches(ownerEmail, [workbookHash]);
+
+      if (existingMatches.length > 0) {
+        totalSkippedWorkbooks += 1;
+        continue;
+      }
+
       const { bookings, expenses, closures } = parseWorkbook(buffer);
 
       const result = await appendImportData({
         ownerEmail,
         fileName: file.name,
+        workbookHash,
         propertyName: targetPropertyName,
         source: "upload",
         bookings: bookings.map((booking) => ({
@@ -107,13 +132,22 @@ export async function POST(request: Request) {
     }
 
     const duplicateNotice =
-      totalSkippedBookings > 0 || totalSkippedExpenses > 0 || totalSkippedClosures > 0
-        ? ` Skipped ${totalSkippedBookings} duplicate bookings, ${totalSkippedExpenses} duplicate expenses, and ${totalSkippedClosures} duplicate closed-day records already saved in Hostlyx.`
+      totalSkippedBookings > 0 ||
+      totalSkippedExpenses > 0 ||
+      totalSkippedClosures > 0 ||
+      totalSkippedWorkbooks > 0
+        ? ` Skipped ${totalSkippedWorkbooks} duplicate workbooks, ${totalSkippedBookings} duplicate bookings, ${totalSkippedExpenses} duplicate expenses, and ${totalSkippedClosures} duplicate closed-day records already saved in Hostlyx.`
         : "";
     const fileLabel =
       importedFiles.length === 1
         ? importedFiles[0]
         : `${importedFiles.length} workbooks`;
+
+    if (importedFiles.length === 0 && totalSkippedWorkbooks > 0) {
+      return NextResponse.json({
+        message: `No new workbooks were imported. Hostlyx recognized ${totalSkippedWorkbooks} selected file${totalSkippedWorkbooks === 1 ? "" : "s"} as already saved by content, so nothing new was added.`,
+      });
+    }
 
     return NextResponse.json({
       message: `Added ${totalBookings} bookings, ${totalExpenses} expenses, and ${totalClosures} closed-day records from ${fileLabel} into ${targetPropertyName}. The records now live inside Hostlyx and the upload stays in Import History.${duplicateNotice}`,

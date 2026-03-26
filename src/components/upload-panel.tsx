@@ -1,17 +1,37 @@
 "use client";
 
-import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   FileSpreadsheet,
   LoaderCircle,
+  TriangleAlert,
   UploadCloud,
   X,
 } from "lucide-react";
 import type { PropertyDefinition } from "@/lib/types";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
+type FileStatus = "checking" | "ready" | "duplicate-existing" | "duplicate-selection" | "error";
+type DuplicateMatch = {
+  workbookHash: string;
+  fileName: string;
+  propertyName: string;
+  importedAt: string;
+};
+type SelectedFileMeta = {
+  status: FileStatus;
+  hash?: string;
+  duplicateMatch?: DuplicateMatch;
+};
 
 function inputClassName() {
   return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
@@ -48,6 +68,32 @@ function mergeFiles(currentFiles: File[], incomingFiles: File[]) {
   return nextFiles;
 }
 
+function getFileKey(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function formatImportedAt(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+async function hashFile(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export function UploadPanel({
   properties,
 }: {
@@ -59,6 +105,174 @@ export function UploadPanel({
   const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedFileMeta, setSelectedFileMeta] = useState<Record<string, SelectedFileMeta>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function inspectFiles() {
+      if (selectedFiles.length === 0) {
+        setSelectedFileMeta({});
+        return;
+      }
+
+      const checkingState = Object.fromEntries(
+        selectedFiles.map((file) => [getFileKey(file), { status: "checking" as const }]),
+      );
+      setSelectedFileMeta(checkingState);
+
+      try {
+        const hashedFiles = await Promise.all(
+          selectedFiles.map(async (file) => ({
+            file,
+            key: getFileKey(file),
+            hash: await hashFile(file),
+          })),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const uniqueHashes = Array.from(new Set(hashedFiles.map((entry) => entry.hash)));
+        const response = await fetch("/api/import/check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ hashes: uniqueHashes }),
+        });
+
+        const payload = (await response.json()) as {
+          matches?: DuplicateMatch[];
+        };
+
+        if (!response.ok) {
+          throw new Error("Duplicate check failed.");
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const matchesByHash = new Map(
+          (payload.matches ?? []).map((match) => [match.workbookHash, match]),
+        );
+        const seenHashes = new Set<string>();
+        const nextMeta: Record<string, SelectedFileMeta> = {};
+        let duplicateExistingCount = 0;
+        let duplicateSelectionCount = 0;
+
+        for (const entry of hashedFiles) {
+          const existingMatch = matchesByHash.get(entry.hash);
+
+          if (existingMatch) {
+            duplicateExistingCount += 1;
+            nextMeta[entry.key] = {
+              status: "duplicate-existing",
+              hash: entry.hash,
+              duplicateMatch: existingMatch,
+            };
+            continue;
+          }
+
+          if (seenHashes.has(entry.hash)) {
+            duplicateSelectionCount += 1;
+            nextMeta[entry.key] = {
+              status: "duplicate-selection",
+              hash: entry.hash,
+            };
+            continue;
+          }
+
+          seenHashes.add(entry.hash);
+          nextMeta[entry.key] = {
+            status: "ready",
+            hash: entry.hash,
+          };
+        }
+
+        setSelectedFileMeta(nextMeta);
+
+        if (uploadState === "idle") {
+          if (duplicateExistingCount > 0 || duplicateSelectionCount > 0) {
+            setMessage(
+              `${seenHashes.size} workbook${seenHashes.size === 1 ? "" : "s"} ready. ${duplicateExistingCount} already imported and ${duplicateSelectionCount} duplicated inside this selection.`,
+            );
+          } else {
+            setMessage(
+              seenHashes.size === 1
+                ? `${selectedFiles[0]?.name ?? "1 workbook"} selected and ready to import.`
+                : `${seenHashes.size} workbooks selected and ready to import.`,
+            );
+          }
+        }
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        const nextMeta = Object.fromEntries(
+          selectedFiles.map((file) => [
+            getFileKey(file),
+            { status: "error" as const },
+          ]),
+        );
+        setSelectedFileMeta(nextMeta);
+        if (uploadState === "idle") {
+          setMessage(
+            "Selected files were added, but Hostlyx could not verify duplicates right now.",
+          );
+        }
+      }
+    }
+
+    void inspectFiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFiles, uploadState]);
+
+  const selectionSummary = useMemo(() => {
+    let readyCount = 0;
+    let duplicateExistingCount = 0;
+    let duplicateSelectionCount = 0;
+    let checkingCount = 0;
+
+    for (const file of selectedFiles) {
+      const meta = selectedFileMeta[getFileKey(file)];
+
+      switch (meta?.status) {
+        case "ready":
+          readyCount += 1;
+          break;
+        case "duplicate-existing":
+          duplicateExistingCount += 1;
+          break;
+        case "duplicate-selection":
+          duplicateSelectionCount += 1;
+          break;
+        case "checking":
+          checkingCount += 1;
+          break;
+        default:
+          break;
+      }
+    }
+
+    return {
+      readyCount,
+      duplicateExistingCount,
+      duplicateSelectionCount,
+      checkingCount,
+    };
+  }, [selectedFileMeta, selectedFiles]);
+
+  const importableFiles = selectedFiles.filter((file) => {
+    const status = selectedFileMeta[getFileKey(file)]?.status;
+    return status === "ready";
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +280,20 @@ export function UploadPanel({
     if (selectedFiles.length === 0) {
       setUploadState("error");
       setMessage("Choose at least one .xlsx workbook before importing.");
+      return;
+    }
+
+    if (selectionSummary.checkingCount > 0) {
+      setUploadState("error");
+      setMessage("Hostlyx is still checking the selected files for duplicate content.");
+      return;
+    }
+
+    if (importableFiles.length === 0) {
+      setUploadState("error");
+      setMessage(
+        "Every selected workbook is already imported or duplicated in this selection. Remove the repeated files or choose different workbooks.",
+      );
       return;
     }
 
@@ -77,14 +305,14 @@ export function UploadPanel({
 
     setUploadState("uploading");
     setMessage(
-      selectedFiles.length === 1
-        ? `Uploading ${selectedFiles[0].name} into ${selectedPropertyName}...`
-        : `Uploading ${selectedFiles.length} workbooks into ${selectedPropertyName}...`,
+      importableFiles.length === 1
+        ? `Uploading ${importableFiles[0].name} into ${selectedPropertyName}...`
+        : `Uploading ${importableFiles.length} workbooks into ${selectedPropertyName}...`,
     );
 
     try {
       const upload = new FormData();
-      for (const file of selectedFiles) {
+      for (const file of importableFiles) {
         upload.append("files", file);
       }
       upload.set("propertyName", selectedPropertyName);
@@ -110,9 +338,9 @@ export function UploadPanel({
       setUploadState("success");
       setMessage(
         payload.message ??
-          (selectedFiles.length === 1
-            ? `${selectedFiles[0].name} imported successfully.`
-            : `${selectedFiles.length} workbooks imported successfully.`),
+          (importableFiles.length === 1
+            ? `${importableFiles[0].name} imported successfully.`
+            : `${importableFiles.length} workbooks imported successfully.`),
       );
       router.refresh();
     } catch {
@@ -138,8 +366,8 @@ export function UploadPanel({
     setUploadState("idle");
     setMessage(
       nextFiles.length === 1
-        ? `${nextFiles[0].name} selected and ready to import.`
-        : `${nextFiles.length} workbooks selected and ready to import.`,
+        ? `${nextFiles[0].name} selected. Hostlyx is checking it for duplicate content...`
+        : `${nextFiles.length} workbooks selected. Hostlyx is checking them for duplicate content...`,
     );
   }
 
@@ -154,6 +382,11 @@ export function UploadPanel({
     );
 
     setSelectedFiles(nextFiles);
+    setSelectedFileMeta((current) => {
+      const nextMeta = { ...current };
+      delete nextMeta[getFileKey(fileToRemove)];
+      return nextMeta;
+    });
     setUploadState("idle");
     setMessage(
       nextFiles.length === 0
@@ -166,6 +399,7 @@ export function UploadPanel({
 
   function clearSelectedFiles() {
     setSelectedFiles([]);
+    setSelectedFileMeta({});
     setUploadState("idle");
     setMessage("Selection cleared. Choose one or more .xlsx workbooks to import.");
     if (inputRef.current) {
@@ -241,9 +475,11 @@ export function UploadPanel({
               </span>
               <p className="mt-1 text-sm text-[var(--workspace-muted)]">
                 {selectedFiles.length > 0
-                  ? selectedFiles.length === 1
-                    ? "1 file selected and ready to import."
-                    : `${selectedFiles.length} files selected and ready to import.`
+                  ? selectionSummary.checkingCount > 0
+                    ? `Checking ${selectionSummary.checkingCount} file${selectionSummary.checkingCount === 1 ? "" : "s"} for duplicate content...`
+                    : selectionSummary.readyCount === 1
+                      ? "1 new file ready to import."
+                      : `${selectionSummary.readyCount} new files ready to import.`
                   : "Choose one or more .xlsx workbooks to migrate legacy data in."}
               </p>
             </div>
@@ -286,18 +522,59 @@ export function UploadPanel({
                       ) : null}
                     </div>
                     <div className="space-y-2">
-                      {selectedFiles.map((file) => (
+                      {selectedFiles.map((file) => {
+                        const meta = selectedFileMeta[getFileKey(file)];
+
+                        return (
                         <div
-                          key={`${file.name}-${file.size}-${file.lastModified}`}
+                          key={getFileKey(file)}
                           className="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--workspace-border)] bg-white/[0.02] px-3 py-3"
                         >
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-[var(--workspace-text)]">
                               {file.name}
                             </p>
-                            <p className="mt-1 text-xs text-[var(--workspace-muted)]">
-                              {formatFileSize(file.size)}
-                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <p className="text-xs text-[var(--workspace-muted)]">
+                                {formatFileSize(file.size)}
+                              </p>
+                              {meta?.status === "checking" ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-[var(--workspace-muted)]">
+                                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                                  Checking content
+                                </span>
+                              ) : null}
+                              {meta?.status === "ready" ? (
+                                <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[11px] font-medium text-emerald-200">
+                                  Ready
+                                </span>
+                              ) : null}
+                              {meta?.status === "duplicate-selection" ? (
+                                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[11px] font-medium text-amber-200">
+                                  Duplicate in this selection
+                                </span>
+                              ) : null}
+                              {meta?.status === "duplicate-existing" ? (
+                                <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] font-medium text-rose-200">
+                                  Already imported by content
+                                </span>
+                              ) : null}
+                              {meta?.status === "error" ? (
+                                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[11px] font-medium text-amber-200">
+                                  Could not verify
+                                </span>
+                              ) : null}
+                            </div>
+                            {meta?.status === "duplicate-existing" && meta.duplicateMatch ? (
+                              <p className="mt-2 text-xs text-rose-100/85">
+                                Matches {meta.duplicateMatch.fileName} in {meta.duplicateMatch.propertyName} • {formatImportedAt(meta.duplicateMatch.importedAt)}
+                              </p>
+                            ) : null}
+                            {meta?.status === "duplicate-selection" ? (
+                              <p className="mt-2 text-xs text-amber-100/85">
+                                This workbook has the same content as another file in the current selection.
+                              </p>
+                            ) : null}
                           </div>
                           <button
                             type="button"
@@ -309,7 +586,7 @@ export function UploadPanel({
                             <X className="h-4 w-4" />
                           </button>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
                 ) : (
@@ -329,7 +606,12 @@ export function UploadPanel({
 
         <button
           type="submit"
-          disabled={uploadState === "uploading" || selectedFiles.length === 0}
+          disabled={
+            uploadState === "uploading" ||
+            selectedFiles.length === 0 ||
+            selectionSummary.checkingCount > 0 ||
+            importableFiles.length === 0
+          }
           className="workspace-button-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
         >
           {uploadState === "uploading" ? (
@@ -338,7 +620,7 @@ export function UploadPanel({
               Moving data into Hostlyx...
             </>
           ) : (
-            selectedFiles.length > 1 ? "Import into Hostlyx" : "Import into Hostlyx"
+            `Import ${importableFiles.length || 0} new file${importableFiles.length === 1 ? "" : "s"} into Hostlyx`
           )}
         </button>
       </form>
@@ -349,6 +631,8 @@ export function UploadPanel({
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           ) : uploadState === "uploading" ? (
             <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          ) : selectionSummary.duplicateExistingCount > 0 || selectionSummary.duplicateSelectionCount > 0 ? (
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           ) : (
             <UploadCloud className="mt-0.5 h-4 w-4 shrink-0" />
           )}
