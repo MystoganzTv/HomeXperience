@@ -9,10 +9,8 @@ import {
   ReceiptText,
   Users,
 } from "lucide-react";
-import { SignOutButton } from "@/components/auth-buttons";
 import type { CurrencyCode, DashboardView, ImportSummary } from "@/lib/types";
 import { formatCurrency, formatDateLabel, formatNumber, formatPercent } from "@/lib/format";
-import { BusinessSettingsPanel } from "@/components/business-settings-panel";
 import { ChartsPanel } from "@/components/charts-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { ManualEntryPanel } from "@/components/manual-entry-panel";
@@ -20,6 +18,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Modal } from "@/components/modal";
 import { SectionCard } from "@/components/section-card";
 import { UploadPanel } from "@/components/upload-panel";
+import { WorkspaceHeader } from "@/components/workspace-header";
 
 type DashboardShellProps = {
   view: DashboardView;
@@ -65,7 +64,6 @@ export function DashboardShell({
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const metricCards = [
     {
@@ -133,35 +131,15 @@ export function DashboardShell({
   return (
     <>
       <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-6 px-4 py-5 sm:px-6 sm:py-8 xl:px-8">
-        <header className="card-surface rounded-[30px] px-5 py-4 sm:px-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-teal-100">
-                  HomeXperience
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300">
-                  {latestImport?.fileName ?? "No workbook imported"}
-                </span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                  {businessName}
-                </h1>
-                <p className="mt-1 text-sm text-slate-400">
-                  Multi-property friendly accounting for short-term rental operators.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/[0.08]"
-              >
-                Business Settings
-              </button>
+        <WorkspaceHeader
+          activePage="dashboard"
+          businessName={businessName}
+          userName={userName}
+          userEmail={userEmail}
+          currencyCode={currencyCode}
+          latestImport={latestImport}
+          actions={
+            <>
               <button
                 type="button"
                 onClick={() => setIsUploadOpen(true)}
@@ -176,16 +154,9 @@ export function DashboardShell({
               >
                 Add Entry
               </button>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
-                <p className="text-sm font-medium text-white">{userName}</p>
-                <p className="text-xs text-slate-400">
-                  {userEmail} • {currencyCode}
-                </p>
-              </div>
-              <SignOutButton />
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
           <FilterBar
@@ -485,17 +456,6 @@ export function DashboardShell({
         onClose={() => setIsEntryOpen(false)}
       >
         <ManualEntryPanel />
-      </Modal>
-
-      <Modal
-        open={isSettingsOpen}
-        title="Business Settings"
-        onClose={() => setIsSettingsOpen(false)}
-      >
-        <BusinessSettingsPanel
-          initialBusinessName={businessName}
-          initialCurrencyCode={currencyCode}
-        />
       </Modal>
     </>
   );

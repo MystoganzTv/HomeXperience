@@ -7,7 +7,7 @@ export default async function LoginPage() {
   const session = await getAuthSession();
 
   if (session?.user?.email) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return (
@@ -19,11 +19,10 @@ export default async function LoginPage() {
               HomeXperience
             </span>
             <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Secure hosting finance, now tied to your Google account.
+              Secure finance software for modern short-term rental businesses.
             </h1>
             <p className="text-base leading-7 text-slate-300 sm:text-lg">
-              Sign in once and keep your uploads, manual entries, and preferred filters
-              tied to your account instead of a local file.
+              Sign in once and keep your business name, uploads, manual entries, and reporting preferences tied to your own account.
             </p>
           </div>
         </section>

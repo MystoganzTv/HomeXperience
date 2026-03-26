@@ -15,7 +15,7 @@ export function SignInButton({ disabled = false }: SignInButtonProps) {
           return;
         }
 
-        void signIn("google", { callbackUrl: "/" });
+        void signIn("google", { callbackUrl: "/dashboard" });
       }}
       disabled={disabled}
       className="rounded-2xl bg-teal-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
