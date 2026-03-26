@@ -58,8 +58,10 @@ export async function POST(request: Request) {
 
     let totalBookings = 0;
     let totalExpenses = 0;
+    let totalClosures = 0;
     let totalSkippedBookings = 0;
     let totalSkippedExpenses = 0;
+    let totalSkippedClosures = 0;
     const importedFiles: string[] = [];
 
     for (const file of workbookFiles) {
@@ -71,7 +73,7 @@ export async function POST(request: Request) {
       }
 
       const buffer = await file.arrayBuffer();
-      const { bookings, expenses } = parseWorkbook(buffer);
+      const { bookings, expenses, closures } = parseWorkbook(buffer);
 
       const result = await appendImportData({
         ownerEmail,
@@ -88,18 +90,25 @@ export async function POST(request: Request) {
           propertyName: targetPropertyName,
           unitName: "",
         })),
+        closures: closures.map((closure) => ({
+          ...closure,
+          propertyName: targetPropertyName,
+          unitName: "",
+        })),
       });
 
       totalBookings += result.bookingsCount;
       totalExpenses += result.expensesCount;
+      totalClosures += result.closuresCount;
       totalSkippedBookings += result.skippedBookingsCount;
       totalSkippedExpenses += result.skippedExpensesCount;
+      totalSkippedClosures += result.skippedClosuresCount;
       importedFiles.push(file.name);
     }
 
     const duplicateNotice =
-      totalSkippedBookings > 0 || totalSkippedExpenses > 0
-        ? ` Skipped ${totalSkippedBookings} duplicate bookings and ${totalSkippedExpenses} duplicate expenses already saved in Hostlyx.`
+      totalSkippedBookings > 0 || totalSkippedExpenses > 0 || totalSkippedClosures > 0
+        ? ` Skipped ${totalSkippedBookings} duplicate bookings, ${totalSkippedExpenses} duplicate expenses, and ${totalSkippedClosures} duplicate closed-day records already saved in Hostlyx.`
         : "";
     const fileLabel =
       importedFiles.length === 1
@@ -107,7 +116,7 @@ export async function POST(request: Request) {
         : `${importedFiles.length} workbooks`;
 
     return NextResponse.json({
-      message: `Added ${totalBookings} bookings and ${totalExpenses} expenses from ${fileLabel} into ${targetPropertyName}. The records now live inside Hostlyx and the upload stays in Import History.${duplicateNotice}`,
+      message: `Added ${totalBookings} bookings, ${totalExpenses} expenses, and ${totalClosures} closed-day records from ${fileLabel} into ${targetPropertyName}. The records now live inside Hostlyx and the upload stays in Import History.${duplicateNotice}`,
     });
   } catch (error) {
     return NextResponse.json(

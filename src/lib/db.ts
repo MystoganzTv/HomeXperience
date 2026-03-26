@@ -4,6 +4,7 @@ import path from "node:path";
 import { Pool } from "pg";
 import type {
   BookingRecord,
+  CalendarClosureRecord,
   CountryCode,
   ExpenseRecord,
   ImportSource,
@@ -33,6 +34,10 @@ type StoredExpense = Required<ExpenseRecord> & {
   ownerEmail: string;
 };
 
+type StoredCalendarClosure = Required<CalendarClosureRecord> & {
+  ownerEmail: string;
+};
+
 type StoredUserSettings = UserSettings & {
   ownerEmail: string;
 };
@@ -55,11 +60,13 @@ type MemoryStore = {
   nextImportId: number;
   nextBookingId: number;
   nextExpenseId: number;
+  nextClosureId: number;
   nextPropertyId: number;
   nextPropertyUnitId: number;
   imports: StoredImport[];
   bookings: StoredBooking[];
   expenses: StoredExpense[];
+  closures: StoredCalendarClosure[];
   settings: StoredUserSettings[];
   properties: StoredProperty[];
   propertyUnits: StoredPropertyUnit[];
@@ -119,11 +126,13 @@ function getMemoryStore() {
       nextImportId: 1,
       nextBookingId: 1,
       nextExpenseId: 1,
+      nextClosureId: 1,
       nextPropertyId: 1,
       nextPropertyUnitId: 1,
       imports: [],
       bookings: [],
       expenses: [],
+      closures: [],
       settings: [],
       properties: [],
       propertyUnits: [],
@@ -181,7 +190,9 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       total_revenue REAL NOT NULL,
       host_fee REAL NOT NULL,
       payout REAL NOT NULL,
-      nights INTEGER NOT NULL
+      nights INTEGER NOT NULL,
+      booking_number TEXT NOT NULL DEFAULT '',
+      overbooking_status TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS expenses (
@@ -195,6 +206,18 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       category TEXT NOT NULL,
       amount REAL NOT NULL,
       description TEXT NOT NULL,
+      note TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS calendar_closures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_email TEXT NOT NULL DEFAULT 'legacy',
+      import_id INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'upload',
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      unit_name TEXT NOT NULL DEFAULT '',
+      date TEXT NOT NULL,
+      reason TEXT NOT NULL,
       note TEXT NOT NULL
     );
 
@@ -226,6 +249,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_check_in ON bookings(owner_email, check_in);
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
     CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
+    CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
   `);
@@ -278,6 +302,14 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE bookings ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
   }
 
+  if (!hasColumn(db, "bookings", "booking_number")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN booking_number TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "bookings", "overbooking_status")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN overbooking_status TEXT NOT NULL DEFAULT '';");
+  }
+
   if (!hasColumn(db, "expenses", "owner_email")) {
     db.exec("ALTER TABLE expenses ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
   }
@@ -292,6 +324,22 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "expenses", "unit_name")) {
     db.exec("ALTER TABLE expenses ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "owner_email")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "source")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN source TEXT NOT NULL DEFAULT 'upload';");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "property_name")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "unit_name")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
   }
 
   if (!hasColumn(db, "user_settings", "primary_country_code")) {
@@ -370,7 +418,9 @@ async function initializePostgresSchema() {
           total_revenue DOUBLE PRECISION NOT NULL,
           host_fee DOUBLE PRECISION NOT NULL,
           payout DOUBLE PRECISION NOT NULL,
-          nights INTEGER NOT NULL
+          nights INTEGER NOT NULL,
+          booking_number TEXT NOT NULL DEFAULT '',
+          overbooking_status TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS expenses (
@@ -384,6 +434,18 @@ async function initializePostgresSchema() {
           category TEXT NOT NULL,
           amount DOUBLE PRECISION NOT NULL,
           description TEXT NOT NULL,
+          note TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS calendar_closures (
+          id BIGSERIAL PRIMARY KEY,
+          owner_email TEXT NOT NULL,
+          import_id BIGINT NOT NULL DEFAULT 0,
+          source TEXT NOT NULL DEFAULT 'upload',
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
+          unit_name TEXT NOT NULL DEFAULT '',
+          date TEXT NOT NULL,
+          reason TEXT NOT NULL,
           note TEXT NOT NULL
         );
 
@@ -415,6 +477,7 @@ async function initializePostgresSchema() {
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_check_in ON bookings(owner_email, check_in);
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
+        CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
       `);
@@ -463,11 +526,27 @@ async function initializePostgresSchema() {
         ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
       `);
       await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS booking_number TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS overbooking_status TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
         ALTER TABLE expenses
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
       `);
       await pool.query(`
         ALTER TABLE expenses
+        ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_closures
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_closures
         ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
       `);
     })();
@@ -530,6 +609,10 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     hostFee: Number(getRowValue(row, "hostFee", "hostfee")),
     payout: Number(getRowValue(row, "payout")),
     nights: Number(getRowValue(row, "nights")),
+    bookingNumber: String(getRowValue(row, "bookingNumber", "bookingnumber") ?? ""),
+    overbookingStatus: String(
+      getRowValue(row, "overbookingStatus", "overbookingstatus") ?? "",
+    ),
   };
 }
 
@@ -544,6 +627,19 @@ function mapExpenseRecord(row: Record<string, unknown>): ExpenseRecord {
     category: String(getRowValue(row, "category")),
     amount: Number(getRowValue(row, "amount")),
     description: String(getRowValue(row, "description")),
+    note: String(getRowValue(row, "note")),
+  };
+}
+
+function mapCalendarClosureRecord(row: Record<string, unknown>): CalendarClosureRecord {
+  return {
+    id: Number(getRowValue(row, "id")),
+    importId: Number(getRowValue(row, "importId", "importid")),
+    source: String(getRowValue(row, "source")) as ImportSource,
+    propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    unitName: String(getRowValue(row, "unitName", "unitname")),
+    date: String(getRowValue(row, "date")),
+    reason: String(getRowValue(row, "reason")),
     note: String(getRowValue(row, "note")),
   };
 }
@@ -592,6 +688,8 @@ function cloneBookingRecord(booking: StoredBooking): BookingRecord {
     hostFee: booking.hostFee,
     payout: booking.payout,
     nights: booking.nights,
+    bookingNumber: booking.bookingNumber,
+    overbookingStatus: booking.overbookingStatus,
   };
 }
 
@@ -607,6 +705,19 @@ function cloneExpenseRecord(expense: StoredExpense): ExpenseRecord {
     amount: expense.amount,
     description: expense.description,
     note: expense.note,
+  };
+}
+
+function cloneCalendarClosureRecord(closure: StoredCalendarClosure): CalendarClosureRecord {
+  return {
+    id: closure.id,
+    importId: closure.importId,
+    source: closure.source,
+    propertyName: closure.propertyName,
+    unitName: closure.unitName,
+    date: closure.date,
+    reason: closure.reason,
+    note: closure.note,
   };
 }
 
@@ -837,13 +948,25 @@ function createExpenseFingerprint(expense: ExpenseRecord) {
   ].join("|");
 }
 
+function createClosureFingerprint(closure: CalendarClosureRecord) {
+  return [
+    normalizeFingerprintValue(closure.propertyName),
+    normalizeFingerprintValue(closure.unitName),
+    closure.date,
+    normalizeFingerprintValue(closure.reason),
+    normalizeFingerprintValue(closure.note),
+  ].join("|");
+}
+
 type ImportDataResult = {
   importId: number;
   importedAt: string;
   bookingsCount: number;
   expensesCount: number;
+  closuresCount: number;
   skippedBookingsCount: number;
   skippedExpensesCount: number;
+  skippedClosuresCount: number;
 };
 
 type DeleteImportResult = {
@@ -861,6 +984,7 @@ export async function appendImportData({
   source,
   bookings,
   expenses,
+  closures,
 }: {
   ownerEmail: string;
   fileName: string;
@@ -868,6 +992,7 @@ export async function appendImportData({
   source: ImportSource;
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
+  closures: CalendarClosureRecord[];
 }): Promise<ImportDataResult> {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
@@ -919,12 +1044,30 @@ export async function appendImportData({
         `,
         [normalizedEmail],
       );
+      const existingClosures = await client.query(
+        `
+          SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
+            date,
+            reason,
+            note
+          FROM calendar_closures
+          WHERE owner_email = $1 AND source = 'upload'
+        `,
+        [normalizedEmail],
+      );
 
       const bookingFingerprints = new Set(
         existingBookings.rows.map((row) => createBookingFingerprint(mapBookingRecord(row))),
       );
       const expenseFingerprints = new Set(
         existingExpenses.rows.map((row) => createExpenseFingerprint(mapExpenseRecord(row))),
+      );
+      const closureFingerprints = new Set(
+        existingClosures.rows.map((row) =>
+          createClosureFingerprint(mapCalendarClosureRecord(row as Record<string, unknown>)),
+        ),
       );
 
       const freshBookings = bookings.filter((booking) => {
@@ -943,6 +1086,15 @@ export async function appendImportData({
         }
 
         expenseFingerprints.add(fingerprint);
+        return true;
+      });
+      const freshClosures = closures.filter((closure) => {
+        const fingerprint = createClosureFingerprint(closure);
+        if (closureFingerprints.has(fingerprint)) {
+          return false;
+        }
+
+        closureFingerprints.add(fingerprint);
         return true;
       });
 
@@ -973,9 +1125,9 @@ export async function appendImportData({
             INSERT INTO bookings (
               owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
               channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-              cleaning_fee, total_revenue, host_fee, payout, nights
+              cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
           `,
           [
             normalizedEmail,
@@ -998,6 +1150,8 @@ export async function appendImportData({
             booking.hostFee,
             booking.payout,
             booking.nights,
+            booking.bookingNumber,
+            booking.overbookingStatus,
           ],
         );
       }
@@ -1025,6 +1179,27 @@ export async function appendImportData({
         );
       }
 
+      for (const closure of freshClosures) {
+        await client.query(
+          `
+            INSERT INTO calendar_closures (
+              owner_email, import_id, source, property_name, unit_name, date, reason, note
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `,
+          [
+            normalizedEmail,
+            importId,
+            source,
+            closure.propertyName,
+            closure.unitName,
+            closure.date,
+            closure.reason,
+            closure.note,
+          ],
+        );
+      }
+
       await client.query("COMMIT");
 
       return {
@@ -1032,8 +1207,10 @@ export async function appendImportData({
         importedAt,
         bookingsCount: freshBookings.length,
         expensesCount: freshExpenses.length,
+        closuresCount: freshClosures.length,
         skippedBookingsCount: bookings.length - freshBookings.length,
         skippedExpensesCount: expenses.length - freshExpenses.length,
+        skippedClosuresCount: closures.length - freshClosures.length,
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1058,6 +1235,11 @@ export async function appendImportData({
         .filter((expense) => expense.ownerEmail === normalizedEmail && expense.source === "upload")
         .map(createExpenseFingerprint),
     );
+    const closureFingerprints = new Set(
+      store.closures
+        .filter((closure) => closure.ownerEmail === normalizedEmail && closure.source === "upload")
+        .map(createClosureFingerprint),
+    );
 
     const freshBookings = bookings.filter((booking) => {
       const fingerprint = createBookingFingerprint(booking);
@@ -1075,6 +1257,15 @@ export async function appendImportData({
       }
 
       expenseFingerprints.add(fingerprint);
+      return true;
+    });
+    const freshClosures = closures.filter((closure) => {
+      const fingerprint = createClosureFingerprint(closure);
+      if (closureFingerprints.has(fingerprint)) {
+        return false;
+      }
+
+      closureFingerprints.add(fingerprint);
       return true;
     });
 
@@ -1109,13 +1300,25 @@ export async function appendImportData({
       });
     }
 
+    for (const closure of freshClosures) {
+      store.closures.push({
+        ...closure,
+        id: store.nextClosureId++,
+        importId,
+        ownerEmail: normalizedEmail,
+        source,
+      });
+    }
+
     return {
       importId,
       importedAt,
       bookingsCount: freshBookings.length,
       expensesCount: freshExpenses.length,
+      closuresCount: freshClosures.length,
       skippedBookingsCount: bookings.length - freshBookings.length,
       skippedExpensesCount: expenses.length - freshExpenses.length,
+      skippedClosuresCount: closures.length - freshClosures.length,
     };
   }
 
@@ -1166,9 +1369,25 @@ export async function appendImportData({
       )
       .all(normalizedEmail)
       .map((row) => mapExpenseRecord(row as Record<string, unknown>));
+    const existingClosures = db
+      .prepare(
+        `
+          SELECT
+            property_name AS propertyName,
+            unit_name AS unitName,
+            date,
+            reason,
+            note
+          FROM calendar_closures
+          WHERE owner_email = ? AND source = 'upload'
+        `,
+      )
+      .all(normalizedEmail)
+      .map((row) => mapCalendarClosureRecord(row as Record<string, unknown>));
 
     const bookingFingerprints = new Set(existingBookings.map(createBookingFingerprint));
     const expenseFingerprints = new Set(existingExpenses.map(createExpenseFingerprint));
+    const closureFingerprints = new Set(existingClosures.map(createClosureFingerprint));
     const freshBookings = bookings.filter((booking) => {
       const fingerprint = createBookingFingerprint(booking);
       if (bookingFingerprints.has(fingerprint)) {
@@ -1185,6 +1404,15 @@ export async function appendImportData({
       }
 
       expenseFingerprints.add(fingerprint);
+      return true;
+    });
+    const freshClosures = closures.filter((closure) => {
+      const fingerprint = createClosureFingerprint(closure);
+      if (closureFingerprints.has(fingerprint)) {
+        return false;
+      }
+
+      closureFingerprints.add(fingerprint);
       return true;
     });
 
@@ -1213,9 +1441,9 @@ export async function appendImportData({
       INSERT INTO bookings (
         owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
         channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-        cleaning_fee, total_revenue, host_fee, payout, nights
+        cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertExpense = db.prepare(`
@@ -1223,6 +1451,12 @@ export async function appendImportData({
         owner_email, import_id, source, property_name, unit_name, date, category, amount, description, note
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertClosure = db.prepare(`
+      INSERT INTO calendar_closures (
+        owner_email, import_id, source, property_name, unit_name, date, reason, note
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const booking of freshBookings) {
@@ -1247,6 +1481,8 @@ export async function appendImportData({
         booking.hostFee,
         booking.payout,
         booking.nights,
+        booking.bookingNumber,
+        booking.overbookingStatus,
       );
     }
 
@@ -1265,13 +1501,28 @@ export async function appendImportData({
       );
     }
 
+    for (const closure of freshClosures) {
+      insertClosure.run(
+        normalizedEmail,
+        importId,
+        source,
+        closure.propertyName,
+        closure.unitName,
+        closure.date,
+        closure.reason,
+        closure.note,
+      );
+    }
+
     return {
       importId,
       importedAt,
       bookingsCount: freshBookings.length,
       expensesCount: freshExpenses.length,
+      closuresCount: freshClosures.length,
       skippedBookingsCount: bookings.length - freshBookings.length,
       skippedExpensesCount: expenses.length - freshExpenses.length,
+      skippedClosuresCount: closures.length - freshClosures.length,
     };
   });
 
@@ -1440,6 +1691,10 @@ export async function deleteImportBatch({
         "DELETE FROM expenses WHERE owner_email = $1 AND import_id = $2",
         [normalizedEmail, importId],
       );
+      await client.query(
+        "DELETE FROM calendar_closures WHERE owner_email = $1 AND import_id = $2",
+        [normalizedEmail, importId],
+      );
       await client.query("DELETE FROM imports WHERE owner_email = $1 AND id = $2", [
         normalizedEmail,
         importId,
@@ -1486,6 +1741,9 @@ export async function deleteImportBatch({
     store.expenses = store.expenses.filter(
       (expense) => !(expense.ownerEmail === normalizedEmail && expense.importId === importId),
     );
+    store.closures = store.closures.filter(
+      (closure) => !(closure.ownerEmail === normalizedEmail && closure.importId === importId),
+    );
     store.imports = store.imports.filter(
       (entry) => !(entry.ownerEmail === normalizedEmail && entry.id === importId),
     );
@@ -1530,6 +1788,10 @@ export async function deleteImportBatch({
       db
         .prepare("DELETE FROM expenses WHERE owner_email = ? AND import_id = ?")
         .run(normalizedEmail, importId).changes ?? 0;
+    db.prepare("DELETE FROM calendar_closures WHERE owner_email = ? AND import_id = ?").run(
+      normalizedEmail,
+      importId,
+    );
     db.prepare("DELETE FROM imports WHERE owner_email = ? AND id = ?").run(
       normalizedEmail,
       importId,
@@ -1576,7 +1838,9 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           total_revenue AS totalRevenue,
           host_fee AS hostFee,
           payout,
-          nights
+          nights,
+          booking_number AS bookingNumber,
+          overbooking_status AS overbookingStatus
         FROM bookings
         WHERE owner_email = $1
         ORDER BY check_in ASC
@@ -1620,7 +1884,9 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           total_revenue AS totalRevenue,
           host_fee AS hostFee,
           payout,
-          nights
+          nights,
+          booking_number AS bookingNumber,
+          overbooking_status AS overbookingStatus
         FROM bookings
         WHERE owner_email = ?
         ORDER BY check_in ASC
@@ -1690,6 +1956,64 @@ export async function getExpenses(ownerEmail: string): Promise<ExpenseRecord[]> 
     )
     .all(normalizedEmail)
     .map((row) => mapExpenseRecord(row as Record<string, unknown>));
+}
+
+export async function getCalendarClosures(ownerEmail: string): Promise<CalendarClosureRecord[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          source,
+          property_name AS propertyName,
+          unit_name AS unitName,
+          date,
+          reason,
+          note
+        FROM calendar_closures
+        WHERE owner_email = $1
+        ORDER BY date ASC
+      `,
+      [normalizedEmail],
+    );
+
+    return result.rows.map((row) => mapCalendarClosureRecord(row as Record<string, unknown>));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+
+    return store.closures
+      .filter((closure) => closure.ownerEmail === normalizedEmail)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .map(cloneCalendarClosureRecord);
+  }
+
+  const db = getSQLiteDatabase();
+  return db
+    .prepare(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          source,
+          property_name AS propertyName,
+          unit_name AS unitName,
+          date,
+          reason,
+          note
+        FROM calendar_closures
+        WHERE owner_email = ?
+        ORDER BY date ASC
+      `,
+    )
+    .all(normalizedEmail)
+    .map((row) => mapCalendarClosureRecord(row as Record<string, unknown>));
 }
 
 export async function getPropertyDefinitions(
@@ -2150,7 +2474,7 @@ export async function deletePropertyDefinition({
     }
 
     const propertyName = String(getRowValue(propertyRow, "name"));
-    const [bookingUsage, expenseUsage, importUsage] = await Promise.all([
+    const [bookingUsage, expenseUsage, importUsage, closureUsage] = await Promise.all([
       pool.query(
         "SELECT COUNT(*) AS count FROM bookings WHERE owner_email = $1 AND property_name = $2",
         [normalizedEmail, propertyName],
@@ -2161,6 +2485,10 @@ export async function deletePropertyDefinition({
       ),
       pool.query(
         "SELECT COUNT(*) AS count FROM imports WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
+      ),
+      pool.query(
+        "SELECT COUNT(*) AS count FROM calendar_closures WHERE owner_email = $1 AND property_name = $2",
         [normalizedEmail, propertyName],
       ),
     ]);
@@ -2174,12 +2502,15 @@ export async function deletePropertyDefinition({
     const importCount = Number(
       getRowValue(importUsage.rows[0] as Record<string, unknown>, "count"),
     );
+    const closureCount = Number(
+      getRowValue(closureUsage.rows[0] as Record<string, unknown>, "count"),
+    );
     const propertiesCount = Number(
       getRowValue(propertiesCountResult.rows[0] as Record<string, unknown>, "count"),
     );
 
-    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
-      throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
+    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0 || closureCount > 0) && !deleteLinkedData) {
+      throw new Error("This property still has linked imports, bookings, closed days, or expenses. Confirm destructive delete to remove everything tied to it.");
     }
 
     await pool.query("BEGIN");
@@ -2190,13 +2521,17 @@ export async function deletePropertyDefinition({
           "DELETE FROM bookings WHERE owner_email = $1 AND property_name = $2",
           [normalizedEmail, propertyName],
         );
-        await pool.query(
-          "DELETE FROM expenses WHERE owner_email = $1 AND property_name = $2",
-          [normalizedEmail, propertyName],
-        );
-        await pool.query(
-          "DELETE FROM imports WHERE owner_email = $1 AND property_name = $2",
-          [normalizedEmail, propertyName],
+      await pool.query(
+        "DELETE FROM expenses WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
+      );
+      await pool.query(
+        "DELETE FROM calendar_closures WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
+      );
+      await pool.query(
+        "DELETE FROM imports WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
         );
       }
 
@@ -2244,9 +2579,12 @@ export async function deletePropertyDefinition({
     const importCount = store.imports.filter(
       (entry) => entry.ownerEmail === normalizedEmail && entry.propertyName === property.name,
     ).length;
+    const closureCount = store.closures.filter(
+      (closure) => closure.ownerEmail === normalizedEmail && closure.propertyName === property.name,
+    ).length;
 
-    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
-      throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
+    if ((bookingCount > 0 || expenseCount > 0 || importCount > 0 || closureCount > 0) && !deleteLinkedData) {
+      throw new Error("This property still has linked imports, bookings, closed days, or expenses. Confirm destructive delete to remove everything tied to it.");
     }
 
     if (deleteLinkedData) {
@@ -2255,6 +2593,9 @@ export async function deletePropertyDefinition({
       );
       store.expenses = store.expenses.filter(
         (expense) => !(expense.ownerEmail === normalizedEmail && expense.propertyName === property.name),
+      );
+      store.closures = store.closures.filter(
+        (closure) => !(closure.ownerEmail === normalizedEmail && closure.propertyName === property.name),
       );
       store.imports = store.imports.filter(
         (entry) => !(entry.ownerEmail === normalizedEmail && entry.propertyName === property.name),
@@ -2297,6 +2638,9 @@ export async function deletePropertyDefinition({
   const importUsage = db
     .prepare("SELECT COUNT(*) AS count FROM imports WHERE owner_email = ? AND property_name = ?")
     .get(normalizedEmail, property.name) as { count?: number } | undefined;
+  const closureUsage = db
+    .prepare("SELECT COUNT(*) AS count FROM calendar_closures WHERE owner_email = ? AND property_name = ?")
+    .get(normalizedEmail, property.name) as { count?: number } | undefined;
   const propertiesCount = db
     .prepare("SELECT COUNT(*) AS count FROM properties WHERE owner_email = ?")
     .get(normalizedEmail) as { count?: number } | undefined;
@@ -2304,9 +2648,10 @@ export async function deletePropertyDefinition({
   const bookingCount = bookingUsage?.count ?? 0;
   const expenseCount = expenseUsage?.count ?? 0;
   const importCount = importUsage?.count ?? 0;
+  const closureCount = closureUsage?.count ?? 0;
 
-  if ((bookingCount > 0 || expenseCount > 0 || importCount > 0) && !deleteLinkedData) {
-    throw new Error("This property still has linked imports, bookings, or expenses. Confirm destructive delete to remove everything tied to it.");
+  if ((bookingCount > 0 || expenseCount > 0 || importCount > 0 || closureCount > 0) && !deleteLinkedData) {
+    throw new Error("This property still has linked imports, bookings, closed days, or expenses. Confirm destructive delete to remove everything tied to it.");
   }
 
   const transaction = db.transaction(() => {
@@ -2316,6 +2661,10 @@ export async function deletePropertyDefinition({
         property.name,
       );
       db.prepare("DELETE FROM expenses WHERE owner_email = ? AND property_name = ?").run(
+        normalizedEmail,
+        property.name,
+      );
+      db.prepare("DELETE FROM calendar_closures WHERE owner_email = ? AND property_name = ?").run(
         normalizedEmail,
         property.name,
       );
@@ -2364,9 +2713,9 @@ export async function insertManualBooking({
         INSERT INTO bookings (
           owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-          cleaning_fee, total_revenue, host_fee, payout, nights
+          cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
         )
-        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         RETURNING id
       `,
       [
@@ -2388,6 +2737,8 @@ export async function insertManualBooking({
         booking.hostFee,
         booking.payout,
         booking.nights,
+        booking.bookingNumber,
+        booking.overbookingStatus,
       ],
     );
 
@@ -2416,9 +2767,9 @@ export async function insertManualBooking({
         INSERT INTO bookings (
           owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-          cleaning_fee, total_revenue, host_fee, payout, nights
+          cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
         )
-        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
@@ -2440,6 +2791,8 @@ export async function insertManualBooking({
       booking.hostFee,
       booking.payout,
       booking.nights,
+      booking.bookingNumber,
+      booking.overbookingStatus,
     );
 
   return Number(result.lastInsertRowid);
@@ -2553,7 +2906,9 @@ export async function updateBookingRecord({
           total_revenue = $16,
           host_fee = $17,
           payout = $18,
-          nights = $19
+          nights = $19,
+          booking_number = $20,
+          overbooking_status = $21
         WHERE id = $1 AND owner_email = $2
       `,
       [
@@ -2576,6 +2931,8 @@ export async function updateBookingRecord({
         booking.hostFee,
         booking.payout,
         booking.nights,
+        booking.bookingNumber,
+        booking.overbookingStatus,
       ],
     );
 
@@ -2625,7 +2982,9 @@ export async function updateBookingRecord({
         total_revenue = ?,
         host_fee = ?,
         payout = ?,
-        nights = ?
+        nights = ?,
+        booking_number = ?,
+        overbooking_status = ?
       WHERE id = ? AND owner_email = ?
     `,
   ).run(
@@ -2646,6 +3005,8 @@ export async function updateBookingRecord({
     booking.hostFee,
     booking.payout,
     booking.nights,
+    booking.bookingNumber,
+    booking.overbookingStatus,
     bookingId,
     normalizedEmail,
   );

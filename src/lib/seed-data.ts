@@ -266,6 +266,8 @@ const baseSeedExpenses = [
 export const seedBookings: BookingRecord[] = baseSeedBookings.map((booking) => ({
   propertyName: "Demo Property",
   unitName: "Main Suite",
+  bookingNumber: "",
+  overbookingStatus: "",
   ...booking,
 }));
 

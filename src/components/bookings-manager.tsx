@@ -105,13 +105,14 @@ export function BookingsManager({
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              <tr>
-                <th className="pb-3 pr-4 font-medium">Property</th>
-                <th className="pb-3 pr-4 font-medium">Guest</th>
-                <th className="pb-3 pr-4 font-medium">Stay</th>
-                <th className="pb-3 pr-4 font-medium">Guests</th>
-                <th className="pb-3 pr-4 font-medium">Channel</th>
-                <th className="pb-3 pr-4 font-medium">Revenue</th>
+                <tr>
+                  <th className="pb-3 pr-4 font-medium">Property</th>
+                  <th className="pb-3 pr-4 font-medium">Guest</th>
+                  <th className="pb-3 pr-4 font-medium">Stay</th>
+                  <th className="pb-3 pr-4 font-medium">Booking Ref</th>
+                  <th className="pb-3 pr-4 font-medium">Guests</th>
+                  <th className="pb-3 pr-4 font-medium">Channel</th>
+                  <th className="pb-3 pr-4 font-medium">Revenue</th>
                 <th className="pb-3 pr-4 font-medium">Payout</th>
                 <th className="pb-3 font-medium">Actions</th>
               </tr>
@@ -129,10 +130,18 @@ export function BookingsManager({
                     <div>
                       <p className="font-medium text-[var(--workspace-text)]">{booking.guestName}</p>
                       <p className="mt-1 text-xs text-slate-400">{booking.rentalPeriod}</p>
+                      {booking.overbookingStatus ? (
+                        <p className="mt-2 inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200">
+                          {booking.overbookingStatus}
+                        </p>
+                      ) : null}
                     </div>
                   </td>
                   <td className="py-4 pr-4">
                     {formatDateLabel(booking.checkIn)} to {formatDateLabel(booking.checkout)}
+                  </td>
+                  <td className="py-4 pr-4 text-xs text-slate-300">
+                    {booking.bookingNumber || "Not set"}
                   </td>
                   <td className="py-4 pr-4">{formatNumber(booking.guestCount)}</td>
                   <td className="py-4 pr-4">{booking.channel}</td>
@@ -189,6 +198,14 @@ export function BookingsManager({
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Guest name</span>
               <input className={inputClassName()} name="guestName" defaultValue={editingBooking.guestName} required />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Booking number</span>
+              <input className={inputClassName()} name="bookingNumber" defaultValue={editingBooking.bookingNumber} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Overbooking status</span>
+              <input className={inputClassName()} name="overbookingStatus" defaultValue={editingBooking.overbookingStatus} />
             </label>
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Guests</span>

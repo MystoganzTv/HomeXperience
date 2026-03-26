@@ -68,6 +68,8 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
     hostFee,
     payout,
     nights,
+    bookingNumber: parseText(formData.get("bookingNumber")),
+    overbookingStatus: parseText(formData.get("overbookingStatus")),
   };
 }
 

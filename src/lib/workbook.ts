@@ -1,6 +1,16 @@
-import { differenceInCalendarDays, formatISO, isValid, parse } from "date-fns";
+import {
+  addMonths,
+  differenceInCalendarDays,
+  formatISO,
+  isValid,
+  parse,
+} from "date-fns";
 import * as XLSX from "xlsx";
-import type { BookingRecord, ExpenseRecord } from "./types";
+import type {
+  BookingRecord,
+  CalendarClosureRecord,
+  ExpenseRecord,
+} from "./types";
 
 type CellValue = string | number | boolean | Date | null | undefined;
 type SheetRow = CellValue[];
@@ -20,6 +30,8 @@ const bookingColumnMap = {
   totalRevenue: ["totalrevenue"],
   hostFee: ["hostfee"],
   payout: ["payout"],
+  bookingNumber: ["bookingnumber"],
+  overbookingStatus: ["overbookingstatus"],
 } as const;
 
 const expenseColumnMap = {
@@ -94,9 +106,7 @@ function parseExcelDate(value: CellValue) {
     const parsed = XLSX.SSF.parse_date_code(value);
 
     if (parsed) {
-      const normalized = new Date(
-        Date.UTC(parsed.y, parsed.m - 1, parsed.d ?? 1),
-      );
+      const normalized = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d ?? 1));
       return formatISO(normalized, { representation: "date" });
     }
   }
@@ -156,6 +166,14 @@ function getWorksheet(workbook: XLSX.WorkBook, name: string) {
   return workbook.Sheets[match];
 }
 
+function getOptionalWorksheet(workbook: XLSX.WorkBook, name: string) {
+  const match = workbook.SheetNames.find(
+    (sheetName) => normalizeHeader(sheetName) === normalizeHeader(name),
+  );
+
+  return match ? workbook.Sheets[match] : null;
+}
+
 function mapHeaderIndexes(
   headers: SheetRow,
   columns: Record<string, readonly string[]>,
@@ -164,9 +182,7 @@ function mapHeaderIndexes(
 
   return Object.fromEntries(
     Object.entries(columns).map(([key, aliases]) => {
-      const index = normalizedHeaders.findIndex((header) =>
-        aliases.includes(header),
-      );
+      const index = normalizedHeaders.findIndex((header) => aliases.includes(header));
 
       if (index === -1) {
         throw new Error(`Missing required column: ${key}`);
@@ -197,6 +213,181 @@ function rowIsEmpty(row: SheetRow) {
   return row.every((cell) => String(cell ?? "").trim() === "");
 }
 
+function parseMonthName(value: CellValue) {
+  const monthNames = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ];
+  const raw = String(value ?? "").trim().toLowerCase();
+  const index = monthNames.findIndex((month) => month === raw);
+  return index >= 0 ? index + 1 : null;
+}
+
+function extractDayNumber(value: CellValue) {
+  const raw = String(value ?? "").trim();
+
+  if (!/^\d{1,2}$/.test(raw)) {
+    return null;
+  }
+
+  const day = Number(raw);
+  return day >= 1 && day <= 31 ? day : null;
+}
+
+function resolveCalendarDate(
+  dateRow: SheetRow,
+  targetColumnIndex: number,
+  currentYear: number,
+  currentMonth: number,
+) {
+  const calendarColumns = [4, 5, 6, 7, 8, 9, 10];
+  const targetIndex = calendarColumns.indexOf(targetColumnIndex);
+
+  if (targetIndex < 0) {
+    return "";
+  }
+
+  const dateCells = calendarColumns.map((columnIndex) => extractDayNumber(dateRow[columnIndex]));
+
+  if (dateCells[targetIndex] === null) {
+    return "";
+  }
+
+  const firstCurrentMonthIndex = dateCells.findIndex((day) => day === 1);
+  let monthOffset = 0;
+  let previousDay: number | null = null;
+
+  for (let index = 0; index <= targetIndex; index += 1) {
+    const day = dateCells[index];
+
+    if (day === null) {
+      continue;
+    }
+
+    if (firstCurrentMonthIndex >= 0 && index < firstCurrentMonthIndex) {
+      monthOffset = -1;
+    } else if (
+      previousDay !== null &&
+      day < previousDay &&
+      !(firstCurrentMonthIndex >= 0 && index === firstCurrentMonthIndex)
+    ) {
+      monthOffset += 1;
+    } else if (firstCurrentMonthIndex >= 0 && index >= firstCurrentMonthIndex && monthOffset < 0) {
+      monthOffset = 0;
+    }
+
+    previousDay = day;
+  }
+
+  const anchor = addMonths(new Date(currentYear, currentMonth - 1, 1), monthOffset);
+  return formatISO(
+    new Date(anchor.getFullYear(), anchor.getMonth(), dateCells[targetIndex] ?? 1),
+    {
+      representation: "date",
+    },
+  );
+}
+
+function parseCalendarClosures(rows: SheetRow[]) {
+  const closuresByDate = new Map<string, CalendarClosureRecord>();
+  let currentYear: number | null = null;
+  let currentMonth: number | null = null;
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    const yearValue = row
+      .map((cell) => String(cell ?? "").trim())
+      .find((cell) => /^\d{4}$/.test(cell));
+    const monthValue = row
+      .map((cell) => parseMonthName(cell))
+      .find((value) => value !== null);
+
+    if (yearValue && monthValue) {
+      currentYear = Number(yearValue);
+      currentMonth = monthValue;
+    }
+
+    if (!currentYear || !currentMonth) {
+      continue;
+    }
+
+    for (let columnIndex = 4; columnIndex <= 10; columnIndex += 1) {
+      const rawValue = String(row[columnIndex] ?? "").trim();
+
+      if (!rawValue || !/closed/i.test(rawValue)) {
+        continue;
+      }
+
+      let dateRowIndex = -1;
+
+      for (let searchIndex = rowIndex - 1; searchIndex >= Math.max(0, rowIndex - 6); searchIndex -= 1) {
+        if (extractDayNumber(rows[searchIndex]?.[columnIndex]) !== null) {
+          dateRowIndex = searchIndex;
+          break;
+        }
+      }
+
+      if (dateRowIndex < 0) {
+        continue;
+      }
+
+      const date = resolveCalendarDate(
+        rows[dateRowIndex],
+        columnIndex,
+        currentYear,
+        currentMonth,
+      );
+
+      if (!date) {
+        continue;
+      }
+
+      const noteLines = new Set<string>();
+      for (let detailIndex = dateRowIndex + 1; detailIndex <= Math.min(rows.length - 1, rowIndex + 1); detailIndex += 1) {
+        const detailValue = String(rows[detailIndex]?.[columnIndex] ?? "").trim();
+        if (detailValue) {
+          noteLines.add(detailValue);
+        }
+      }
+
+      const note = Array.from(noteLines).join("\n");
+      const reason =
+        note
+          .split("\n")
+          .map((line) => line.replace(/check-in:\s*/i, "").trim())
+          .find(
+            (line) =>
+              line &&
+              !/closed/i.test(line) &&
+              !/guests:/i.test(line) &&
+              !/nights:/i.test(line),
+          ) || "Closed";
+      const existing = closuresByDate.get(date);
+
+      closuresByDate.set(date, {
+        propertyName: "Default Property",
+        unitName: "",
+        date,
+        reason,
+        note: existing?.note ? `${existing.note}\n${note}` : note,
+        source: "upload",
+      });
+    }
+  }
+
+  return Array.from(closuresByDate.values());
+}
+
 export function parseWorkbook(buffer: ArrayBuffer) {
   const workbook = XLSX.read(buffer, {
     type: "array",
@@ -205,9 +396,11 @@ export function parseWorkbook(buffer: ArrayBuffer) {
 
   const bookingsSheet = getWorksheet(workbook, "Bookings");
   const expensesSheet = getWorksheet(workbook, "Expenses");
+  const calendarSheet = getOptionalWorksheet(workbook, "Calendar");
 
   const bookingRows = getSheetRows(bookingsSheet);
   const expenseRows = getSheetRows(expensesSheet);
+  const calendarRows = calendarSheet ? getSheetRows(calendarSheet) : [];
 
   if (!bookingRows.length) {
     throw new Error("The Bookings sheet is empty.");
@@ -219,14 +412,8 @@ export function parseWorkbook(buffer: ArrayBuffer) {
 
   const bookingHeaderRowIndex = findHeaderRowIndex(bookingRows, bookingColumnMap);
   const expenseHeaderRowIndex = findHeaderRowIndex(expenseRows, expenseColumnMap);
-  const bookingIndexes = mapHeaderIndexes(
-    bookingRows[bookingHeaderRowIndex],
-    bookingColumnMap,
-  );
-  const expenseIndexes = mapHeaderIndexes(
-    expenseRows[expenseHeaderRowIndex],
-    expenseColumnMap,
-  );
+  const bookingIndexes = mapHeaderIndexes(bookingRows[bookingHeaderRowIndex], bookingColumnMap);
+  const expenseIndexes = mapHeaderIndexes(expenseRows[expenseHeaderRowIndex], expenseColumnMap);
 
   const bookings: BookingRecord[] = bookingRows
     .slice(bookingHeaderRowIndex + 1)
@@ -237,14 +424,8 @@ export function parseWorkbook(buffer: ArrayBuffer) {
       const rawRentalPeriod = row[bookingIndexes.rentalPeriod];
       const rentalPeriod = String(rawRentalPeriod ?? "").trim();
       const dateDifference =
-        checkIn && checkout
-          ? differenceInCalendarDays(new Date(checkout), new Date(checkIn))
-          : 0;
-
-      const nights = Math.max(
-        1,
-        dateDifference || parseRentalPeriodNights(rentalPeriod) || 1,
-      );
+        checkIn && checkout ? differenceInCalendarDays(new Date(checkout), new Date(checkIn)) : 0;
+      const nights = Math.max(1, dateDifference || parseRentalPeriodNights(rentalPeriod) || 1);
 
       return {
         propertyName: "Default Property",
@@ -255,9 +436,7 @@ export function parseWorkbook(buffer: ArrayBuffer) {
         guestCount: parseCount(row[bookingIndexes.guestCount]),
         channel: normalizeChannel(row[bookingIndexes.channel]),
         rentalPeriod:
-          rentalPeriod && Number.isNaN(Number(rentalPeriod))
-            ? rentalPeriod
-            : `${nights} nights`,
+          rentalPeriod && Number.isNaN(Number(rentalPeriod)) ? rentalPeriod : `${nights} nights`,
         pricePerNight: parseCurrency(row[bookingIndexes.pricePerNight]),
         extraFee: parseCurrency(row[bookingIndexes.extraFee]),
         discount: parseCurrency(row[bookingIndexes.discount]),
@@ -267,6 +446,8 @@ export function parseWorkbook(buffer: ArrayBuffer) {
         hostFee: parseCurrency(row[bookingIndexes.hostFee]),
         payout: parseCurrency(row[bookingIndexes.payout]),
         nights,
+        bookingNumber: String(row[bookingIndexes.bookingNumber] ?? "").trim(),
+        overbookingStatus: String(row[bookingIndexes.overbookingStatus] ?? "").trim(),
       };
     })
     .filter((booking) => booking.checkIn && booking.checkout);
@@ -280,19 +461,20 @@ export function parseWorkbook(buffer: ArrayBuffer) {
       date: parseExcelDate(row[expenseIndexes.date]),
       category: String(row[expenseIndexes.category] ?? "").trim() || "Other",
       amount: parseCurrency(row[expenseIndexes.amount]),
-      description:
-        String(row[expenseIndexes.description] ?? "").trim() ||
-        "Expense import entry",
+      description: String(row[expenseIndexes.description] ?? "").trim() || "Expense import entry",
       note: String(row[expenseIndexes.note] ?? "").trim(),
     }))
     .filter((expense) => expense.date);
 
-  if (!bookings.length && !expenses.length) {
-    throw new Error("No valid rows were found in the Bookings or Expenses sheets.");
+  const closures = calendarRows.length > 0 ? parseCalendarClosures(calendarRows) : [];
+
+  if (!bookings.length && !expenses.length && !closures.length) {
+    throw new Error("No valid rows were found in the workbook.");
   }
 
   return {
     bookings,
     expenses,
+    closures,
   };
 }

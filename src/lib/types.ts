@@ -23,6 +23,8 @@ export type BookingRecord = {
   hostFee: number;
   payout: number;
   nights: number;
+  bookingNumber: string;
+  overbookingStatus: string;
 };
 
 export type ExpenseRecord = {
@@ -35,6 +37,17 @@ export type ExpenseRecord = {
   category: string;
   amount: number;
   description: string;
+  note: string;
+};
+
+export type CalendarClosureRecord = {
+  id?: number;
+  importId?: number;
+  source?: ImportSource;
+  propertyName: string;
+  unitName: string;
+  date: string;
+  reason: string;
   note: string;
 };
 

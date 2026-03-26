@@ -72,7 +72,7 @@ export default async function BookingsPage() {
           </SectionCard>
           <SectionCard title="Editing">
             <p className="text-sm leading-6 text-[var(--workspace-muted)]">
-              Use this page to correct guest data, move bookings between properties or units, and clean imports without touching the spreadsheet.
+              Use this page to review imported stays, correct guest data, and keep bookings accurate directly inside Hostlyx.
             </p>
           </SectionCard>
         </div>
