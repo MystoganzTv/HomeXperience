@@ -14,9 +14,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HomeXperience | Airbnb Host Accounting Dashboard",
+  title: "HomeXperience | Short-Term Rental Accounting Dashboard",
   description:
-    "Upload Airbnb host booking and expense workbooks, normalize the data, and explore revenue, payout, and profitability in one clean dashboard.",
+    "Upload short-term rental booking and expense workbooks, normalize the data, and explore revenue, payout, and profitability in one clean dashboard.",
 };
 
 export default function RootLayout({

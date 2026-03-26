@@ -1,4 +1,5 @@
 export type ImportSource = "demo" | "upload" | "manual";
+export type CurrencyCode = "USD" | "EUR";
 
 export type BookingRecord = {
   id?: number;
@@ -39,6 +40,11 @@ export type ImportSummary = {
   importedAt: string;
   bookingsCount: number;
   expensesCount: number;
+};
+
+export type UserSettings = {
+  businessName: string;
+  currencyCode: CurrencyCode;
 };
 
 export type DashboardFilters = {

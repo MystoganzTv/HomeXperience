@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { buildDashboardView, getDashboardFilters } from "@/lib/dashboard";
-import { getBookings, getExpenses, getLatestImport } from "@/lib/db";
+import { getBookings, getExpenses, getLatestImport, getUserSettings } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { DashboardShell } from "@/components/dashboard-shell";
 
@@ -25,6 +25,7 @@ export default async function Home({
   const bookings = await getBookings(ownerEmail);
   const expenses = await getExpenses(ownerEmail);
   const latestImport = await getLatestImport(ownerEmail);
+  const userSettings = await getUserSettings(ownerEmail, userName);
   const resolvedSearchParams = await searchParams;
   const filters = getDashboardFilters(resolvedSearchParams, bookings, expenses);
   const view = buildDashboardView({
@@ -43,6 +44,8 @@ export default async function Home({
       latestImport={latestImport}
       userName={userName}
       userEmail={ownerEmail}
+      businessName={userSettings.businessName}
+      currencyCode={userSettings.currencyCode}
       manualBookingsCount={manualBookingsCount}
       manualExpensesCount={manualExpensesCount}
       importedBookingsCount={importedBookingsCount}

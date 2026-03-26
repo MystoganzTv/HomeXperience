@@ -1,17 +1,5 @@
 import { format, parseISO } from "date-fns";
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-const preciseCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
+import type { CurrencyCode } from "./types";
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -21,8 +9,21 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 
-export function formatCurrency(value: number, precise = false) {
-  return (precise ? preciseCurrencyFormatter : currencyFormatter).format(
+function getCurrencyFormatter(currencyCode: CurrencyCode, precise: boolean) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: precise ? 0 : 0,
+    maximumFractionDigits: precise ? 2 : 0,
+  });
+}
+
+export function formatCurrency(
+  value: number,
+  precise = false,
+  currencyCode: CurrencyCode = "USD",
+) {
+  return getCurrencyFormatter(currencyCode, precise).format(
     Number.isFinite(value) ? value : 0,
   );
 }
@@ -38,6 +39,7 @@ export function formatNumber(value: number) {
 export function formatMetricValue(
   value: number,
   type: "currency" | "percent" | "number",
+  currencyCode: CurrencyCode = "USD",
 ) {
   if (type === "percent") {
     return formatPercent(value);
@@ -47,7 +49,7 @@ export function formatMetricValue(
     return formatNumber(value);
   }
 
-  return formatCurrency(value);
+  return formatCurrency(value, false, currencyCode);
 }
 
 export function formatDateLabel(value: string) {

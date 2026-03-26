@@ -2,7 +2,14 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { Pool } from "pg";
-import type { BookingRecord, ExpenseRecord, ImportSource, ImportSummary } from "./types";
+import type {
+  BookingRecord,
+  CurrencyCode,
+  ExpenseRecord,
+  ImportSource,
+  ImportSummary,
+  UserSettings,
+} from "./types";
 
 type SQLiteDatabase = import("better-sqlite3").Database;
 type SQLiteModule = typeof import("better-sqlite3");
@@ -19,6 +26,10 @@ type StoredExpense = Required<ExpenseRecord> & {
   ownerEmail: string;
 };
 
+type StoredUserSettings = UserSettings & {
+  ownerEmail: string;
+};
+
 type MemoryStore = {
   nextImportId: number;
   nextBookingId: number;
@@ -26,6 +37,7 @@ type MemoryStore = {
   imports: StoredImport[];
   bookings: StoredBooking[];
   expenses: StoredExpense[];
+  settings: StoredUserSettings[];
 };
 
 const require = createRequire(import.meta.url);
@@ -59,6 +71,17 @@ function normalizeOwnerEmail(ownerEmail: string) {
   return ownerEmail.trim().toLowerCase();
 }
 
+function getDefaultUserSettings(fallbackBusinessName: string): UserSettings {
+  return {
+    businessName: fallbackBusinessName.trim() || "My rental business",
+    currencyCode: "USD",
+  };
+}
+
+function normalizeCurrencyCode(value: string | undefined): CurrencyCode {
+  return value === "EUR" ? "EUR" : "USD";
+}
+
 function getSQLiteModule() {
   if (!sqliteModule) {
     sqliteModule = require("better-sqlite3") as SQLiteModule;
@@ -76,6 +99,7 @@ function getMemoryStore() {
       imports: [],
       bookings: [],
       expenses: [],
+      settings: [],
     };
   }
 
@@ -140,6 +164,13 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       amount REAL NOT NULL,
       description TEXT NOT NULL,
       note TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      owner_email TEXT PRIMARY KEY,
+      business_name TEXT NOT NULL,
+      currency_code TEXT NOT NULL DEFAULT 'USD',
+      updated_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_imports_owner_email ON imports(owner_email);
@@ -246,6 +277,13 @@ async function initializePostgresSchema() {
           amount DOUBLE PRECISION NOT NULL,
           description TEXT NOT NULL,
           note TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_settings (
+          owner_email TEXT PRIMARY KEY,
+          business_name TEXT NOT NULL,
+          currency_code TEXT NOT NULL DEFAULT 'USD',
+          updated_at TIMESTAMPTZ NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_imports_owner_email ON imports(owner_email);
@@ -379,6 +417,13 @@ function cloneExpenseRecord(expense: StoredExpense): ExpenseRecord {
     amount: expense.amount,
     description: expense.description,
     note: expense.note,
+  };
+}
+
+function cloneUserSettings(settings: StoredUserSettings): UserSettings {
+  return {
+    businessName: settings.businessName,
+    currencyCode: settings.currencyCode,
   };
 }
 
@@ -1187,4 +1232,132 @@ export async function insertManualExpense({
     );
 
   return Number(result.lastInsertRowid);
+}
+
+export async function getUserSettings(
+  ownerEmail: string,
+  fallbackBusinessName: string,
+): Promise<UserSettings> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const defaults = getDefaultUserSettings(fallbackBusinessName);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          business_name AS businessName,
+          currency_code AS currencyCode
+        FROM user_settings
+        WHERE owner_email = $1
+      `,
+      [normalizedEmail],
+    );
+
+    if (!result.rows[0]) {
+      return defaults;
+    }
+
+    return {
+      businessName: String(result.rows[0].businessname ?? result.rows[0].businessName ?? defaults.businessName),
+      currencyCode: normalizeCurrencyCode(
+        String(result.rows[0].currencycode ?? result.rows[0].currencyCode ?? defaults.currencyCode),
+      ),
+    };
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const settings = store.settings.find((entry) => entry.ownerEmail === normalizedEmail);
+    return settings ? cloneUserSettings(settings) : defaults;
+  }
+
+  const db = getSQLiteDatabase();
+  const row = db
+    .prepare(
+      `
+        SELECT
+          business_name AS businessName,
+          currency_code AS currencyCode
+        FROM user_settings
+        WHERE owner_email = ?
+      `,
+    )
+    .get(normalizedEmail) as Record<string, unknown> | undefined;
+
+  if (!row) {
+    return defaults;
+  }
+
+  return {
+    businessName: String(getRowValue(row, "businessName", "businessname") ?? defaults.businessName),
+    currencyCode: normalizeCurrencyCode(
+      String(getRowValue(row, "currencyCode", "currencycode") ?? defaults.currencyCode),
+    ),
+  };
+}
+
+export async function upsertUserSettings({
+  ownerEmail,
+  businessName,
+  currencyCode,
+}: {
+  ownerEmail: string;
+  businessName: string;
+  currencyCode: CurrencyCode;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const normalizedBusinessName = businessName.trim() || "My rental business";
+  const normalizedCurrencyCode = normalizeCurrencyCode(currencyCode);
+  const updatedAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    await pool.query(
+      `
+        INSERT INTO user_settings (owner_email, business_name, currency_code, updated_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (owner_email)
+        DO UPDATE SET
+          business_name = EXCLUDED.business_name,
+          currency_code = EXCLUDED.currency_code,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [normalizedEmail, normalizedBusinessName, normalizedCurrencyCode, updatedAt],
+    );
+
+    return;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const existingIndex = store.settings.findIndex((entry) => entry.ownerEmail === normalizedEmail);
+    const nextSettings: StoredUserSettings = {
+      ownerEmail: normalizedEmail,
+      businessName: normalizedBusinessName,
+      currencyCode: normalizedCurrencyCode,
+    };
+
+    if (existingIndex >= 0) {
+      store.settings[existingIndex] = nextSettings;
+    } else {
+      store.settings.push(nextSettings);
+    }
+
+    return;
+  }
+
+  const db = getSQLiteDatabase();
+  db.prepare(
+    `
+      INSERT INTO user_settings (owner_email, business_name, currency_code, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(owner_email) DO UPDATE SET
+        business_name = excluded.business_name,
+        currency_code = excluded.currency_code,
+        updated_at = excluded.updated_at
+    `,
+  ).run(normalizedEmail, normalizedBusinessName, normalizedCurrencyCode, updatedAt);
 }

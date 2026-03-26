@@ -7,10 +7,12 @@ import {
   NotebookPen,
   PanelsTopLeft,
   ReceiptText,
+  Users,
 } from "lucide-react";
 import { SignOutButton } from "@/components/auth-buttons";
-import type { DashboardView, ImportSummary } from "@/lib/types";
+import type { CurrencyCode, DashboardView, ImportSummary } from "@/lib/types";
 import { formatCurrency, formatDateLabel, formatNumber, formatPercent } from "@/lib/format";
+import { BusinessSettingsPanel } from "@/components/business-settings-panel";
 import { ChartsPanel } from "@/components/charts-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { ManualEntryPanel } from "@/components/manual-entry-panel";
@@ -24,6 +26,8 @@ type DashboardShellProps = {
   latestImport: ImportSummary | null;
   userName: string;
   userEmail: string;
+  businessName: string;
+  currencyCode: CurrencyCode;
   manualBookingsCount: number;
   manualExpensesCount: number;
   importedBookingsCount: number;
@@ -51,6 +55,8 @@ export function DashboardShell({
   latestImport,
   userName,
   userEmail,
+  businessName,
+  currencyCode,
   manualBookingsCount,
   manualExpensesCount,
   importedBookingsCount,
@@ -59,6 +65,7 @@ export function DashboardShell({
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const metricCards = [
     {
@@ -139,15 +146,22 @@ export function DashboardShell({
               </div>
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                  Airbnb host accounting dashboard
+                  {businessName}
                 </h1>
                 <p className="mt-1 text-sm text-slate-400">
-                  Less spreadsheet juggling, more live numbers.
+                  Multi-property friendly accounting for short-term rental operators.
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/[0.08]"
+              >
+                Business Settings
+              </button>
               <button
                 type="button"
                 onClick={() => setIsUploadOpen(true)}
@@ -164,7 +178,9 @@ export function DashboardShell({
               </button>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
                 <p className="text-sm font-medium text-white">{userName}</p>
-                <p className="text-xs text-slate-400">{userEmail}</p>
+                <p className="text-xs text-slate-400">
+                  {userEmail} • {currencyCode}
+                </p>
               </div>
               <SignOutButton />
             </div>
@@ -243,6 +259,7 @@ export function DashboardShell({
                   label={card.label}
                   value={card.value}
                   format={card.format}
+                  currencyCode={currencyCode}
                   icon={card.icon}
                 />
               ))}
@@ -253,6 +270,7 @@ export function DashboardShell({
               profitByMonth={view.profitByMonth}
               expensesByCategory={view.expensesByCategory}
               revenueByChannel={view.revenueByChannel}
+              currencyCode={currencyCode}
             />
 
             <SectionCard title="Monthly Summary">
@@ -280,10 +298,10 @@ export function DashboardShell({
                         >
                           <td className="py-4 pr-4 font-medium text-white">{month.label}</td>
                           <td className="py-4 pr-4">{formatNumber(month.bookings)}</td>
-                          <td className="py-4 pr-4">{formatCurrency(month.revenue)}</td>
-                          <td className="py-4 pr-4">{formatCurrency(month.payout)}</td>
-                          <td className="py-4 pr-4">{formatCurrency(month.expenses)}</td>
-                          <td className="py-4 pr-4">{formatCurrency(month.profit)}</td>
+                          <td className="py-4 pr-4">{formatCurrency(month.revenue, false, currencyCode)}</td>
+                          <td className="py-4 pr-4">{formatCurrency(month.payout, false, currencyCode)}</td>
+                          <td className="py-4 pr-4">{formatCurrency(month.expenses, false, currencyCode)}</td>
+                          <td className="py-4 pr-4">{formatCurrency(month.profit, false, currencyCode)}</td>
                           <td className="py-4">{formatPercent(margin)}</td>
                         </tr>
                       );
@@ -298,34 +316,79 @@ export function DashboardShell({
         {activeTab === "activity" ? (
           <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
             <SectionCard title="Recent Bookings">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    <tr>
-                      <th className="pb-3 pr-4 font-medium">Guest</th>
-                      <th className="pb-3 pr-4 font-medium">Check-in</th>
-                      <th className="pb-3 pr-4 font-medium">Checkout</th>
-                      <th className="pb-3 pr-4 font-medium">Channel</th>
-                      <th className="pb-3 pr-4 font-medium">Nights</th>
-                      <th className="pb-3 font-medium">Payout</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {view.recentBookings.map((booking, index) => (
-                      <tr
-                        key={recordKey(booking, `${booking.checkIn}-${booking.guestName}`, index)}
-                        className="border-t border-white/8 text-slate-200"
-                      >
-                        <td className="py-4 pr-4 font-medium text-white">{booking.guestName}</td>
-                        <td className="py-4 pr-4">{formatDateLabel(booking.checkIn)}</td>
-                        <td className="py-4 pr-4">{formatDateLabel(booking.checkout)}</td>
-                        <td className="py-4 pr-4">{booking.channel}</td>
-                        <td className="py-4 pr-4">{formatNumber(booking.nights)}</td>
-                        <td className="py-4">{formatCurrency(booking.payout)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {view.recentBookings.map((booking, index) => (
+                  <article
+                    key={recordKey(booking, `${booking.checkIn}-${booking.guestName}`, index)}
+                    className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-base font-semibold text-white">{booking.guestName}</p>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {booking.channel} • {booking.rentalPeriod}
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              Stay
+                            </p>
+                            <p className="mt-1 text-sm text-slate-100">
+                              {formatDateLabel(booking.checkIn)} to {formatDateLabel(booking.checkout)}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              Guests
+                            </p>
+                            <p className="mt-1 flex items-center gap-2 text-sm text-slate-100">
+                              <Users className="h-4 w-4 text-slate-400" />
+                              {formatNumber(booking.guestCount)} guests
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              Source
+                            </p>
+                            <p className="mt-1 text-sm capitalize text-slate-100">
+                              {booking.source ?? "upload"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[320px]">
+                        <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                            Nights
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-white">
+                            {formatNumber(booking.nights)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                            Total Revenue
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-white">
+                            {formatCurrency(booking.totalRevenue, false, currencyCode)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                            Payout
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-white">
+                            {formatCurrency(booking.payout, false, currencyCode)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
               </div>
             </SectionCard>
 
@@ -337,14 +400,19 @@ export function DashboardShell({
                     className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-white">{expense.description}</p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {expense.category} • {formatDateLabel(expense.date)}
-                        </p>
+                      <div className="space-y-2">
+                        <div>
+                          <p className="font-medium text-white">{expense.description}</p>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {expense.category} • {formatDateLabel(expense.date)}
+                          </p>
+                        </div>
+                        {expense.note ? (
+                          <p className="text-sm leading-6 text-slate-400">{expense.note}</p>
+                        ) : null}
                       </div>
                       <span className="text-sm font-semibold text-slate-100">
-                        {formatCurrency(expense.amount)}
+                        {formatCurrency(expense.amount, false, currencyCode)}
                       </span>
                     </div>
                   </div>
@@ -395,7 +463,7 @@ export function DashboardShell({
                   Channel filters affect bookings only.
                 </div>
                 <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm text-slate-300">
-                  Occupancy assumes one active listing for now.
+                  Each Google account sees only its own business data and preferences.
                 </div>
               </div>
             </SectionCard>
@@ -417,6 +485,17 @@ export function DashboardShell({
         onClose={() => setIsEntryOpen(false)}
       >
         <ManualEntryPanel />
+      </Modal>
+
+      <Modal
+        open={isSettingsOpen}
+        title="Business Settings"
+        onClose={() => setIsSettingsOpen(false)}
+      >
+        <BusinessSettingsPanel
+          initialBusinessName={businessName}
+          initialCurrencyCode={currencyCode}
+        />
       </Modal>
     </>
   );

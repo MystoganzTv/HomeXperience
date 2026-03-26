@@ -14,27 +14,28 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { CategoryPoint, ChannelPoint, MonthlyPoint } from "@/lib/types";
+import type { CategoryPoint, ChannelPoint, CurrencyCode, MonthlyPoint } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { SectionCard } from "./section-card";
 
 const pieColors = ["#5eead4", "#38bdf8", "#f59e0b", "#fb7185", "#a78bfa", "#34d399"];
 
-function compactCurrency(value: number) {
+function compactCurrency(value: number, currencyCode: CurrencyCode) {
   return new Intl.NumberFormat("en-US", {
     notation: "compact",
     compactDisplay: "short",
     style: "currency",
-    currency: "USD",
+    currency: currencyCode,
     maximumFractionDigits: 0,
   }).format(value);
 }
 
 function formatTooltipValue(
   value: string | number | readonly (string | number)[] | undefined,
+  currencyCode: CurrencyCode,
 ) {
   const normalized = Array.isArray(value) ? value[0] : value;
-  return formatCurrency(Number(normalized ?? 0), true);
+  return formatCurrency(Number(normalized ?? 0), true, currencyCode);
 }
 
 function EmptyChartState({ label }: { label: string }) {
@@ -50,11 +51,13 @@ export function ChartsPanel({
   profitByMonth,
   expensesByCategory,
   revenueByChannel,
+  currencyCode,
 }: {
   revenueByMonth: MonthlyPoint[];
   profitByMonth: MonthlyPoint[];
   expensesByCategory: CategoryPoint[];
   revenueByChannel: ChannelPoint[];
+  currencyCode: CurrencyCode;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-2">
@@ -83,14 +86,14 @@ export function ChartsPanel({
                   axisLine={false}
                 />
                 <YAxis
-                  tickFormatter={compactCurrency}
+                  tickFormatter={(value) => compactCurrency(value, currencyCode)}
                   tick={{ fill: "#94a3b8", fontSize: 12 }}
                   tickLine={false}
                   axisLine={false}
                   width={72}
                 />
                 <Tooltip
-                  formatter={(value) => formatTooltipValue(value)}
+                  formatter={(value) => formatTooltipValue(value, currencyCode)}
                   contentStyle={{
                     borderRadius: 18,
                     border: "1px solid rgba(148,163,184,0.18)",
@@ -129,14 +132,14 @@ export function ChartsPanel({
                   axisLine={false}
                 />
                 <YAxis
-                  tickFormatter={compactCurrency}
+                  tickFormatter={(value) => compactCurrency(value, currencyCode)}
                   tick={{ fill: "#94a3b8", fontSize: 12 }}
                   tickLine={false}
                   axisLine={false}
                   width={72}
                 />
                 <Tooltip
-                  formatter={(value) => formatTooltipValue(value)}
+                  formatter={(value) => formatTooltipValue(value, currencyCode)}
                   contentStyle={{
                     borderRadius: 18,
                     border: "1px solid rgba(148,163,184,0.18)",
@@ -178,7 +181,7 @@ export function ChartsPanel({
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value) => formatTooltipValue(value)}
+                    formatter={(value) => formatTooltipValue(value, currencyCode)}
                     contentStyle={{
                       borderRadius: 18,
                       border: "1px solid rgba(148,163,184,0.18)",
@@ -204,7 +207,7 @@ export function ChartsPanel({
                     <span className="text-sm text-slate-200">{item.label}</span>
                   </div>
                   <span className="text-sm font-medium text-slate-100">
-                    {formatCurrency(item.value)}
+                    {formatCurrency(item.value, false, currencyCode)}
                   </span>
                 </div>
               ))}
@@ -227,7 +230,7 @@ export function ChartsPanel({
                 <CartesianGrid stroke="rgba(148,163,184,0.08)" horizontal={false} />
                 <XAxis
                   type="number"
-                  tickFormatter={compactCurrency}
+                  tickFormatter={(value) => compactCurrency(value, currencyCode)}
                   tick={{ fill: "#94a3b8", fontSize: 12 }}
                   tickLine={false}
                   axisLine={false}
@@ -241,7 +244,7 @@ export function ChartsPanel({
                   width={92}
                 />
                 <Tooltip
-                  formatter={(value) => formatTooltipValue(value)}
+                  formatter={(value) => formatTooltipValue(value, currencyCode)}
                   contentStyle={{
                     borderRadius: 18,
                     border: "1px solid rgba(148,163,184,0.18)",
