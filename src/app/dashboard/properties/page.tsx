@@ -146,7 +146,7 @@ export default async function PropertiesPage() {
       pageTitle="Properties"
       pageSubtitle={
         isSetupMode
-          ? "Create your first property before importing data or using the dashboard."
+          ? "Complete your first property setup before anything else in Hostlyx."
           : "Organize the portfolio into properties and optional units."
       }
       businessName={userSettings.businessName}
@@ -159,7 +159,7 @@ export default async function PropertiesPage() {
         {isSetupMode ? (
           <SectionCard
             title="Start With Your First Property"
-            subtitle="Every booking, expense, and import must belong to a real property in Hostlyx."
+            subtitle="Hostlyx opens the setup modal automatically because every booking, expense, and import must belong to a real property first."
           >
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="workspace-soft-card rounded-[24px] p-4">
@@ -223,6 +223,7 @@ export default async function PropertiesPage() {
           <PropertiesManager
             properties={propertyDefinitions}
             summaries={properties}
+            forceCreateOnEmpty={isSetupMode}
           />
         </SectionCard>
       </div>

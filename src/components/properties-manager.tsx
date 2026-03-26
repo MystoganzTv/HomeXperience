@@ -28,13 +28,15 @@ function inputClassName() {
 export function PropertiesManager({
   properties,
   summaries,
+  forceCreateOnEmpty = false,
 }: {
   properties: PropertyDefinition[];
   summaries: PropertySummary[];
+  forceCreateOnEmpty?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(forceCreateOnEmpty);
   const [propertyName, setPropertyName] = useState("");
   const [propertyCountryCode, setPropertyCountryCode] = useState<CountryCode>("US");
   const [propertyMode, setPropertyMode] = useState<"single" | "multi">("single");
@@ -446,7 +448,11 @@ export function PropertiesManager({
       <Modal
         open={isCreateOpen}
         title={properties.length === 0 ? "Create your first property" : "Add property"}
+        dismissible={!forceCreateOnEmpty}
         onClose={() => {
+          if (forceCreateOnEmpty) {
+            return;
+          }
           setIsCreateOpen(false);
           resetCreateState();
         }}
@@ -553,6 +559,12 @@ export function PropertiesManager({
               This property will be treated as one full-home listing. You can still add units later if needed.
             </div>
           )}
+
+          {forceCreateOnEmpty ? (
+            <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
+              Finish this first property setup to unlock imports, dashboard reporting, bookings, and expenses.
+            </div>
+          ) : null}
 
           <button
             type="submit"
