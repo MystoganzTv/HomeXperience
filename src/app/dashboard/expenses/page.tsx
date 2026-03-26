@@ -23,11 +23,16 @@ export default async function ExpensesPage() {
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
-  const [expenses, latestImport, userSettings, properties] = await Promise.all([
+  const properties = await getPropertyDefinitions(ownerEmail);
+
+  if (properties.length === 0) {
+    redirect("/dashboard/properties?setup=1");
+  }
+
+  const [expenses, latestImport, userSettings] = await Promise.all([
     getExpenses(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
-    getPropertyDefinitions(ownerEmail),
   ]);
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);

@@ -114,8 +114,8 @@ export function WorkspaceShell({
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 rounded-[34px] border border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] shadow-[0_20px_40px_rgba(15,23,42,0.04)]">
-          <div className="min-h-full rounded-[34px] bg-[linear-gradient(180deg,rgba(255,255,255,0.74)_0%,rgba(247,249,252,0.96)_100%)] p-5 sm:p-6 xl:p-8">
+        <div className="min-w-0 flex-1 rounded-[34px] border border-[var(--workspace-border)] bg-[rgba(9,17,29,0.7)] shadow-[0_20px_40px_rgba(2,6,23,0.28)]">
+          <div className="min-h-full rounded-[34px] bg-[linear-gradient(180deg,rgba(11,22,38,0.92)_0%,rgba(7,17,29,0.98)_100%)] p-5 sm:p-6 xl:p-8">
             <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] sm:text-4xl">

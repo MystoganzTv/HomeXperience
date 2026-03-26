@@ -59,6 +59,7 @@ export function PropertyUnitFieldGroup({
           type="text"
           name={propertyInputName}
           list={propertyListId}
+          required
           value={propertyName}
           onChange={(event) => {
             const nextProperty = event.target.value;
@@ -76,7 +77,7 @@ export function PropertyUnitFieldGroup({
             }
           }}
           placeholder={
-            properties.length > 0 ? "Pick or type a property" : "Default Property"
+            properties.length > 0 ? "Pick or type a property" : "Create a property first"
           }
         />
         <datalist id={propertyListId}>
@@ -115,7 +116,9 @@ export function PropertyUnitFieldGroup({
             ? units.length > 0
               ? "This property already has saved units you can reuse."
               : "This property has no units yet. Leave blank or add one in Properties."
-            : "Units are optional. You can leave this blank for single-unit properties."}
+            : properties.length > 0
+              ? "Units are optional. You can leave this blank for single-home properties."
+              : "Create your first property before adding bookings or expenses."}
         </p>
       </label>
     </>

@@ -27,10 +27,15 @@ function ensureDate(value: string, fieldLabel: string) {
 export function normalizeManualBooking(formData: FormData): BookingRecord {
   const checkIn = ensureDate(parseText(formData.get("checkIn")), "check-in date");
   const checkout = ensureDate(parseText(formData.get("checkout")), "checkout date");
+  const propertyName = parseText(formData.get("propertyName"));
   const nights = differenceInCalendarDays(parseISO(checkout), parseISO(checkIn));
 
   if (nights <= 0) {
     throw new Error("Checkout must be after check-in.");
+  }
+
+  if (!propertyName) {
+    throw new Error("Choose a property before saving the booking.");
   }
 
   const pricePerNight = parseMoney(formData.get("pricePerNight"));
@@ -46,7 +51,7 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
 
   return {
     source: "manual",
-    propertyName: parseText(formData.get("propertyName")) || "Default Property",
+    propertyName,
     unitName: parseText(formData.get("unitName")),
     checkIn,
     checkout,
@@ -69,14 +74,19 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
 export function normalizeManualExpense(formData: FormData): ExpenseRecord {
   const date = ensureDate(parseText(formData.get("date")), "expense date");
   const amount = parseMoney(formData.get("amount"));
+  const propertyName = parseText(formData.get("propertyName"));
 
   if (amount <= 0) {
     throw new Error("Enter an expense amount greater than zero.");
   }
 
+  if (!propertyName) {
+    throw new Error("Choose a property before saving the expense.");
+  }
+
   return {
     source: "manual",
-    propertyName: parseText(formData.get("propertyName")) || "Default Property",
+    propertyName,
     unitName: parseText(formData.get("unitName")),
     date,
     category: parseText(formData.get("category")) || "Other",

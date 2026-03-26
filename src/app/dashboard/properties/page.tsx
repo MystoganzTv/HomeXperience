@@ -104,12 +104,17 @@ export default async function PropertiesPage() {
   }
 
   properties.sort((left, right) => left.name.localeCompare(right.name));
+  const isSetupMode = propertyDefinitions.length === 0;
 
   return (
     <WorkspaceShell
       activePage="properties"
       pageTitle="Properties"
-      pageSubtitle="Organize the portfolio into properties and optional units."
+      pageSubtitle={
+        isSetupMode
+          ? "Create your first property before importing data or using the dashboard."
+          : "Organize the portfolio into properties and optional units."
+      }
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -117,6 +122,34 @@ export default async function PropertiesPage() {
       latestImport={latestImport}
     >
       <div className="space-y-6">
+        {isSetupMode ? (
+          <SectionCard
+            title="Start With Your First Property"
+            subtitle="Every booking, expense, and import must belong to a real property in Hostlyx."
+          >
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="workspace-soft-card rounded-[24px] p-4">
+                <p className="text-sm font-semibold text-[var(--workspace-text)]">Single house</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                  Choose this when you rent the full home as one listing. No units are required.
+                </p>
+              </div>
+              <div className="workspace-soft-card rounded-[24px] p-4">
+                <p className="text-sm font-semibold text-[var(--workspace-text)]">Multi-unit property</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                  Tell Hostlyx how many units you have, and we will create them automatically for you.
+                </p>
+              </div>
+              <div className="workspace-soft-card rounded-[24px] p-4">
+                <p className="text-sm font-semibold text-[var(--workspace-text)]">What unlocks next</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                  Once the first property exists, dashboard, imports, bookings, and expenses become available.
+                </p>
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-3">
           <SectionCard title="Properties">
             <div className="flex items-center gap-3">
@@ -140,14 +173,18 @@ export default async function PropertiesPage() {
           </SectionCard>
           <SectionCard title="How to use it">
             <p className="text-sm leading-6 text-[var(--workspace-muted)]">
-              Imported files default to `Default Property`. Use Bookings and Expenses to reassign rows once your structure is ready.
+              Imports are assigned to the property you choose during upload. Single-home rentals can stay without units, while multi-unit properties can be expanded later.
             </p>
           </SectionCard>
         </div>
 
         <SectionCard
-          title="Property Setup"
-          subtitle="Create the portfolio structure first, then assign bookings and expenses to the right property and unit."
+          title={isSetupMode ? "Create Your First Property" : "Property Setup"}
+          subtitle={
+            isSetupMode
+              ? "Tell Hostlyx whether this is a single-home rental or a building with several units."
+              : "Create the portfolio structure first, then assign bookings and expenses to the right property and unit."
+          }
         >
           <PropertiesManager
             properties={propertyDefinitions}

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Layers3, Plus } from "lucide-react";
+import { Building2, House, Layers3, Plus } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { CurrencyCode, PropertyDefinition } from "@/lib/types";
 
@@ -31,6 +31,8 @@ export function PropertiesManager({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [propertyName, setPropertyName] = useState("");
+  const [propertyMode, setPropertyMode] = useState<"single" | "multi">("single");
+  const [unitCount, setUnitCount] = useState("2");
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,22 +45,62 @@ export function PropertiesManager({
     startTransition(() => {
       void (async () => {
         try {
+          const normalizedName = propertyName.trim();
+          const normalizedUnitCount = Math.max(2, Math.trunc(Number(unitCount) || 0));
+
+          if (!normalizedName) {
+            setError("Enter a property name first.");
+            return;
+          }
+
+          if (propertyMode === "multi" && normalizedUnitCount < 2) {
+            setError("Multi-unit properties need at least 2 units.");
+            return;
+          }
+
           const formData = new FormData();
-          formData.set("name", propertyName);
+          formData.set("name", normalizedName);
 
           const response = await fetch("/api/properties", {
             method: "POST",
             body: formData,
           });
-          const payload = (await response.json()) as { error?: string; message?: string };
+          const payload = (await response.json()) as { error?: string; message?: string; propertyId?: number };
 
           if (!response.ok) {
             setError(payload.error ?? "The property could not be created.");
             return;
           }
 
+          const propertyId = Number(payload.propertyId);
+
+          if (propertyMode === "multi" && Number.isFinite(propertyId) && propertyId > 0) {
+            for (let index = 1; index <= normalizedUnitCount; index += 1) {
+              const unitFormData = new FormData();
+              unitFormData.set("name", `Unit ${index}`);
+
+              const unitResponse = await fetch(`/api/properties/${propertyId}/units`, {
+                method: "POST",
+                body: unitFormData,
+              });
+
+              if (!unitResponse.ok) {
+                const unitPayload = (await unitResponse.json()) as { error?: string };
+                setError(unitPayload.error ?? "The property was created, but some units could not be added.");
+                router.refresh();
+                return;
+              }
+            }
+          }
+
           setPropertyName("");
-          setMessage(payload.message ?? "Property created.");
+          setPropertyMode("single");
+          setUnitCount("2");
+          setMessage(
+            propertyMode === "multi"
+              ? `${normalizedName} created with ${normalizedUnitCount} units.`
+              : payload.message ?? "Property created.",
+          );
           router.refresh();
         } catch {
           setError("The property could not be created.");
@@ -111,9 +153,11 @@ export function PropertiesManager({
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-base font-semibold text-[var(--workspace-text)]">Create property</p>
+              <p className="text-base font-semibold text-[var(--workspace-text)]">
+                {properties.length === 0 ? "Create your first property" : "Create property"}
+              </p>
               <p className="mt-1 text-sm text-[var(--workspace-muted)]">
-                Add standalone homes or multi-unit buildings.
+                Start with the way this listing is rented, then decide whether units are needed.
               </p>
             </div>
           </div>
@@ -125,6 +169,64 @@ export function PropertiesManager({
               onChange={(event) => setPropertyName(event.target.value)}
               placeholder="Villa Sol, PinarSabroso, Downtown Lofts..."
             />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setPropertyMode("single")}
+                className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  propertyMode === "single"
+                    ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)]"
+                    : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <House className="h-4 w-4" />
+                  <span className="text-sm font-semibold">Single house</span>
+                </div>
+                <p className="mt-2 text-xs leading-5">
+                  Rent the entire home as one listing. No units are necessary.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPropertyMode("multi")}
+                className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  propertyMode === "multi"
+                    ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)]"
+                    : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Layers3 className="h-4 w-4" />
+                  <span className="text-sm font-semibold">Multi-unit</span>
+                </div>
+                <p className="mt-2 text-xs leading-5">
+                  Apartments, rooms, suites, or several rentable units inside one property.
+                </p>
+              </button>
+            </div>
+
+            {propertyMode === "multi" ? (
+              <label className="space-y-2">
+                <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                  How many units does it have?
+                </span>
+                <input
+                  className={inputClassName()}
+                  type="number"
+                  min="2"
+                  max="50"
+                  value={unitCount}
+                  onChange={(event) => setUnitCount(event.target.value)}
+                />
+              </label>
+            ) : (
+              <div className="workspace-soft-card rounded-[22px] px-4 py-3 text-sm text-[var(--workspace-muted)]">
+                This property will be treated as one full-home listing. You can still add units later if needed.
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isPending}
@@ -153,7 +255,7 @@ export function PropertiesManager({
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Structure</p>
               <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
-                Properties can have no units, one unit, or several units.
+                Single-home rentals can skip units. Multi-unit properties can auto-create unit slots during setup.
               </p>
             </div>
           </div>

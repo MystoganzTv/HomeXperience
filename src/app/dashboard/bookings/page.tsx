@@ -23,11 +23,16 @@ export default async function BookingsPage() {
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
-  const [bookings, latestImport, userSettings, properties] = await Promise.all([
+  const properties = await getPropertyDefinitions(ownerEmail);
+
+  if (properties.length === 0) {
+    redirect("/dashboard/properties?setup=1");
+  }
+
+  const [bookings, latestImport, userSettings] = await Promise.all([
     getBookings(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
-    getPropertyDefinitions(ownerEmail),
   ]);
 
   const propertyCount = new Set(bookings.map((booking) => booking.propertyName)).size;

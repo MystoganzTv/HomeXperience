@@ -27,11 +27,16 @@ export default async function DashboardPage({
   }
 
   const userName = session.user.name ?? session.user.email ?? "Host";
+  const properties = await getPropertyDefinitions(ownerEmail);
+
+  if (properties.length === 0) {
+    redirect("/dashboard/properties?setup=1");
+  }
+
   const bookings = await getBookings(ownerEmail);
   const expenses = await getExpenses(ownerEmail);
   const latestImport = await getLatestImport(ownerEmail);
   const userSettings = await getUserSettings(ownerEmail, userName);
-  const properties = await getPropertyDefinitions(ownerEmail);
   const resolvedSearchParams = await searchParams;
   const filters = getDashboardFilters(resolvedSearchParams, bookings, expenses);
   const view = buildDashboardView({

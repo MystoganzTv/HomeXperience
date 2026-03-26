@@ -326,7 +326,7 @@ export function DashboardShell({
         title="Import Excel Workbook"
         onClose={() => setIsUploadOpen(false)}
       >
-        <UploadPanel />
+        <UploadPanel properties={properties} />
       </Modal>
 
       <Modal

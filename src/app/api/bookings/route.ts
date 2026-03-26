@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
-import { insertManualBooking } from "@/lib/db";
+import { getPropertyDefinitions, insertManualBooking } from "@/lib/db";
 import { normalizeManualBooking } from "@/lib/manual-entry";
 
 export const runtime = "nodejs";
@@ -11,6 +11,15 @@ export async function POST(request: Request) {
 
     if (!ownerEmail) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const properties = await getPropertyDefinitions(ownerEmail);
+
+    if (properties.length === 0) {
+      return NextResponse.json(
+        { error: "Create your first property before adding bookings." },
+        { status: 400 },
+      );
     }
 
     const formData = await request.formData();

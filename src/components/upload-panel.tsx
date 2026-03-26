@@ -3,8 +3,13 @@
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, FileSpreadsheet, LoaderCircle, UploadCloud } from "lucide-react";
+import type { PropertyDefinition } from "@/lib/types";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
+
+function inputClassName() {
+  return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
+}
 
 function formatFileSize(size: number) {
   if (size >= 1024 * 1024) {
@@ -18,10 +23,15 @@ function formatFileSize(size: number) {
   return `${size} B`;
 }
 
-export function UploadPanel() {
+export function UploadPanel({
+  properties,
+}: {
+  properties: PropertyDefinition[];
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -34,12 +44,19 @@ export function UploadPanel() {
       return;
     }
 
+    if (!selectedPropertyName) {
+      setUploadState("error");
+      setMessage("Choose the property that this workbook belongs to.");
+      return;
+    }
+
     setUploadState("uploading");
-    setMessage(`Uploading ${selectedFile.name}...`);
+    setMessage(`Uploading ${selectedFile.name} into ${selectedPropertyName}...`);
 
     try {
       const upload = new FormData();
       upload.set("file", selectedFile);
+      upload.set("propertyName", selectedPropertyName);
 
       const response = await fetch("/api/import", {
         method: "POST",
@@ -84,9 +101,9 @@ export function UploadPanel() {
 
   const statusTone =
     uploadState === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-200"
       : uploadState === "error"
-        ? "border-rose-200 bg-rose-50 text-rose-600"
+        ? "border-rose-400/24 bg-rose-400/10 text-rose-200"
         : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]";
 
   return (
@@ -116,6 +133,32 @@ export function UploadPanel() {
         />
 
         <div className="workspace-soft-card rounded-[22px] border border-dashed p-4">
+          <div className="mb-4 space-y-2">
+            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+              Target property
+            </span>
+            {properties.length > 1 ? (
+              <select
+                className={inputClassName()}
+                value={selectedPropertyName}
+                onChange={(event) => setSelectedPropertyName(event.target.value)}
+              >
+                {properties.map((property) => (
+                  <option key={property.id ?? property.name} value={property.name}>
+                    {property.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="rounded-[18px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm text-[var(--workspace-text)]">
+                {selectedPropertyName}
+              </div>
+            )}
+            <p className="text-xs text-[var(--workspace-muted)]">
+              Imported bookings and expenses will be assigned to this property.
+            </p>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <span className="block text-sm font-medium text-[var(--workspace-text)]">
