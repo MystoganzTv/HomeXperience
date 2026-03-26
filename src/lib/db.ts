@@ -1,22 +1,84 @@
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import Database from "better-sqlite3";
 import { Pool } from "pg";
 import type { BookingRecord, ExpenseRecord, ImportSource, ImportSummary } from "./types";
 
-let sqliteDatabase: Database.Database | null = null;
+type SQLiteDatabase = import("better-sqlite3").Database;
+type SQLiteModule = typeof import("better-sqlite3");
+
+type StoredImport = ImportSummary & {
+  ownerEmail: string;
+};
+
+type StoredBooking = Required<BookingRecord> & {
+  ownerEmail: string;
+};
+
+type StoredExpense = Required<ExpenseRecord> & {
+  ownerEmail: string;
+};
+
+type MemoryStore = {
+  nextImportId: number;
+  nextBookingId: number;
+  nextExpenseId: number;
+  imports: StoredImport[];
+  bookings: StoredBooking[];
+  expenses: StoredExpense[];
+};
+
+const require = createRequire(import.meta.url);
+
+let sqliteDatabase: SQLiteDatabase | null = null;
+let sqliteModule: SQLiteModule | null = null;
 let postgresPool: Pool | null = null;
 let postgresInitialization: Promise<void> | null = null;
 
+declare global {
+  var __homexperienceMemoryStore: MemoryStore | undefined;
+}
+
 function isPostgresConfigured() {
   return Boolean(process.env.DATABASE_URL);
+}
+
+function shouldUseSQLiteFallback() {
+  return !isPostgresConfigured() && process.env.NODE_ENV !== "production";
+}
+
+function shouldUseMemoryFallback() {
+  return !isPostgresConfigured() && !shouldUseSQLiteFallback();
 }
 
 function normalizeOwnerEmail(ownerEmail: string) {
   return ownerEmail.trim().toLowerCase();
 }
 
-function hasColumn(db: Database.Database, tableName: string, columnName: string) {
+function getSQLiteModule() {
+  if (!sqliteModule) {
+    sqliteModule = require("better-sqlite3") as SQLiteModule;
+  }
+
+  return sqliteModule;
+}
+
+function getMemoryStore() {
+  if (!globalThis.__homexperienceMemoryStore) {
+    globalThis.__homexperienceMemoryStore = {
+      nextImportId: 1,
+      nextBookingId: 1,
+      nextExpenseId: 1,
+      imports: [],
+      bookings: [],
+      expenses: [],
+    };
+  }
+
+  return globalThis.__homexperienceMemoryStore;
+}
+
+function hasColumn(db: SQLiteDatabase, tableName: string, columnName: string) {
   const columns = db
     .prepare(`PRAGMA table_info(${tableName})`)
     .all() as Array<{ name: string }>;
@@ -30,7 +92,7 @@ function getSQLiteDatabasePath() {
   return path.join(directory, "homexperience.sqlite");
 }
 
-function initializeSQLiteSchema(db: Database.Database) {
+function initializeSQLiteSchema(db: SQLiteDatabase) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS imports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +167,8 @@ function initializeSQLiteSchema(db: Database.Database) {
 
 function getSQLiteDatabase() {
   if (!sqliteDatabase) {
-    sqliteDatabase = new Database(getSQLiteDatabasePath());
+    const SQLite = getSQLiteModule();
+    sqliteDatabase = new SQLite(getSQLiteDatabasePath());
     sqliteDatabase.pragma("journal_mode = WAL");
     initializeSQLiteSchema(sqliteDatabase);
   }
@@ -198,58 +261,120 @@ async function ensureDatabase() {
     return;
   }
 
-  getSQLiteDatabase();
+  if (shouldUseSQLiteFallback()) {
+    getSQLiteDatabase();
+    return;
+  }
+
+  getMemoryStore();
 }
 
 function mapImportSummary(row: Record<string, unknown>): ImportSummary {
-  const importedAt = row.importedat;
+  const importedAt = getRowValue(row, "importedAt", "importedat");
 
   return {
-    id: Number(row.id),
-    fileName: String(row.filename),
-    source: String(row.source) as ImportSource,
+    id: Number(getRowValue(row, "id")),
+    fileName: String(getRowValue(row, "fileName", "filename")),
+    source: String(getRowValue(row, "source")) as ImportSource,
     importedAt:
       importedAt instanceof Date
         ? importedAt.toISOString()
         : String(importedAt),
-    bookingsCount: Number(row.bookingscount),
-    expensesCount: Number(row.expensescount),
+    bookingsCount: Number(getRowValue(row, "bookingsCount", "bookingscount")),
+    expensesCount: Number(getRowValue(row, "expensesCount", "expensescount")),
   };
 }
 
 function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
   return {
-    id: Number(row.id),
-    importId: Number(row.importid),
-    source: String(row.source) as ImportSource,
-    checkIn: String(row.checkin),
-    checkout: String(row.checkout),
-    guestName: String(row.guestname),
-    guestCount: Number(row.guestcount),
-    channel: String(row.channel),
-    rentalPeriod: String(row.rentalperiod),
-    pricePerNight: Number(row.pricepernight),
-    extraFee: Number(row.extrafee),
-    discount: Number(row.discount),
-    rentalRevenue: Number(row.rentalrevenue),
-    cleaningFee: Number(row.cleaningfee),
-    totalRevenue: Number(row.totalrevenue),
-    hostFee: Number(row.hostfee),
-    payout: Number(row.payout),
-    nights: Number(row.nights),
+    id: Number(getRowValue(row, "id")),
+    importId: Number(getRowValue(row, "importId", "importid")),
+    source: String(getRowValue(row, "source")) as ImportSource,
+    checkIn: String(getRowValue(row, "checkIn", "checkin")),
+    checkout: String(getRowValue(row, "checkout")),
+    guestName: String(getRowValue(row, "guestName", "guestname")),
+    guestCount: Number(getRowValue(row, "guestCount", "guestcount")),
+    channel: String(getRowValue(row, "channel")),
+    rentalPeriod: String(getRowValue(row, "rentalPeriod", "rentalperiod")),
+    pricePerNight: Number(getRowValue(row, "pricePerNight", "pricepernight")),
+    extraFee: Number(getRowValue(row, "extraFee", "extrafee")),
+    discount: Number(getRowValue(row, "discount")),
+    rentalRevenue: Number(getRowValue(row, "rentalRevenue", "rentalrevenue")),
+    cleaningFee: Number(getRowValue(row, "cleaningFee", "cleaningfee")),
+    totalRevenue: Number(getRowValue(row, "totalRevenue", "totalrevenue")),
+    hostFee: Number(getRowValue(row, "hostFee", "hostfee")),
+    payout: Number(getRowValue(row, "payout")),
+    nights: Number(getRowValue(row, "nights")),
   };
 }
 
 function mapExpenseRecord(row: Record<string, unknown>): ExpenseRecord {
   return {
-    id: Number(row.id),
-    importId: Number(row.importid),
-    source: String(row.source) as ImportSource,
-    date: String(row.date),
-    category: String(row.category),
-    amount: Number(row.amount),
-    description: String(row.description),
-    note: String(row.note),
+    id: Number(getRowValue(row, "id")),
+    importId: Number(getRowValue(row, "importId", "importid")),
+    source: String(getRowValue(row, "source")) as ImportSource,
+    date: String(getRowValue(row, "date")),
+    category: String(getRowValue(row, "category")),
+    amount: Number(getRowValue(row, "amount")),
+    description: String(getRowValue(row, "description")),
+    note: String(getRowValue(row, "note")),
+  };
+}
+
+function getRowValue(row: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    if (key in row) {
+      return row[key];
+    }
+  }
+
+  return undefined;
+}
+
+function cloneImportSummary(importSummary: StoredImport): ImportSummary {
+  return {
+    id: importSummary.id,
+    fileName: importSummary.fileName,
+    source: importSummary.source,
+    importedAt: importSummary.importedAt,
+    bookingsCount: importSummary.bookingsCount,
+    expensesCount: importSummary.expensesCount,
+  };
+}
+
+function cloneBookingRecord(booking: StoredBooking): BookingRecord {
+  return {
+    id: booking.id,
+    importId: booking.importId,
+    source: booking.source,
+    checkIn: booking.checkIn,
+    checkout: booking.checkout,
+    guestName: booking.guestName,
+    guestCount: booking.guestCount,
+    channel: booking.channel,
+    rentalPeriod: booking.rentalPeriod,
+    pricePerNight: booking.pricePerNight,
+    extraFee: booking.extraFee,
+    discount: booking.discount,
+    rentalRevenue: booking.rentalRevenue,
+    cleaningFee: booking.cleaningFee,
+    totalRevenue: booking.totalRevenue,
+    hostFee: booking.hostFee,
+    payout: booking.payout,
+    nights: booking.nights,
+  };
+}
+
+function cloneExpenseRecord(expense: StoredExpense): ExpenseRecord {
+  return {
+    id: expense.id,
+    importId: expense.importId,
+    source: expense.source,
+    date: expense.date,
+    category: expense.category,
+    amount: expense.amount,
+    description: expense.description,
+    note: expense.note,
   };
 }
 
@@ -377,6 +502,57 @@ export async function replaceImportData({
     }
   }
 
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const importedAt = new Date().toISOString();
+    const importId = store.nextImportId++;
+
+    store.bookings = store.bookings.filter(
+      (booking) => booking.ownerEmail !== normalizedEmail || booking.source === "manual",
+    );
+    store.expenses = store.expenses.filter(
+      (expense) => expense.ownerEmail !== normalizedEmail || expense.source === "manual",
+    );
+    store.imports = store.imports.filter((entry) => entry.ownerEmail !== normalizedEmail);
+
+    store.imports.push({
+      id: importId,
+      ownerEmail: normalizedEmail,
+      fileName,
+      source,
+      importedAt,
+      bookingsCount: bookings.length,
+      expensesCount: expenses.length,
+    });
+
+    for (const booking of bookings) {
+      store.bookings.push({
+        ...booking,
+        id: store.nextBookingId++,
+        importId,
+        ownerEmail: normalizedEmail,
+        source,
+      });
+    }
+
+    for (const expense of expenses) {
+      store.expenses.push({
+        ...expense,
+        id: store.nextExpenseId++,
+        importId,
+        ownerEmail: normalizedEmail,
+        source,
+      });
+    }
+
+    return {
+      importId,
+      importedAt,
+      bookingsCount: bookings.length,
+      expensesCount: expenses.length,
+    };
+  }
+
   const db = getSQLiteDatabase();
   const transaction = db.transaction(() => {
     db.prepare(
@@ -496,6 +672,15 @@ export async function getLatestImport(ownerEmail: string): Promise<ImportSummary
     return result.rows[0] ? mapImportSummary(result.rows[0]) : null;
   }
 
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const latestImport = store.imports
+      .filter((entry) => entry.ownerEmail === normalizedEmail)
+      .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0];
+
+    return latestImport ? cloneImportSummary(latestImport) : null;
+  }
+
   const db = getSQLiteDatabase();
   const row = db
     .prepare(
@@ -555,6 +740,15 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
     return result.rows.map(mapBookingRecord);
   }
 
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+
+    return store.bookings
+      .filter((booking) => booking.ownerEmail === normalizedEmail)
+      .sort((left, right) => left.checkIn.localeCompare(right.checkIn))
+      .map(cloneBookingRecord);
+  }
+
   const db = getSQLiteDatabase();
   return db
     .prepare(
@@ -612,6 +806,15 @@ export async function getExpenses(ownerEmail: string): Promise<ExpenseRecord[]> 
     );
 
     return result.rows.map(mapExpenseRecord);
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+
+    return store.expenses
+      .filter((expense) => expense.ownerEmail === normalizedEmail)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .map(cloneExpenseRecord);
   }
 
   const db = getSQLiteDatabase();
@@ -681,6 +884,21 @@ export async function insertManualBooking({
     return Number(result.rows[0]?.id ?? 0);
   }
 
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const id = store.nextBookingId++;
+
+    store.bookings.push({
+      ...booking,
+      id,
+      importId: 0,
+      ownerEmail: normalizedEmail,
+      source: "manual",
+    });
+
+    return id;
+  }
+
   const db = getSQLiteDatabase();
   const result = db
     .prepare(
@@ -746,6 +964,21 @@ export async function insertManualExpense({
     );
 
     return Number(result.rows[0]?.id ?? 0);
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const id = store.nextExpenseId++;
+
+    store.expenses.push({
+      ...expense,
+      id,
+      importId: 0,
+      ownerEmail: normalizedEmail,
+      source: "manual",
+    });
+
+    return id;
   }
 
   const db = getSQLiteDatabase();
