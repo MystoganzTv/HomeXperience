@@ -9,38 +9,31 @@ function navLinkClassName(active: boolean) {
 
 export function MarketingHeader({
   activePage,
-  signedIn,
 }: {
   activePage: "home" | "pricing";
-  signedIn: boolean;
 }) {
+  const navItems = [
+    { label: "Inicio", href: activePage === "home" ? "#hero" : "/#hero", active: activePage === "home" },
+    { label: "Problema", href: activePage === "home" ? "#problem" : "/#problem", active: false },
+    { label: "Solución", href: activePage === "home" ? "#solution" : "/#solution", active: false },
+    { label: "Funciones", href: activePage === "home" ? "#features" : "/#features", active: false },
+    { label: "Precios", href: activePage === "pricing" ? "/pricing" : "#pricing", active: activePage === "pricing" },
+  ];
+
   return (
-    <header className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 xl:px-8">
-      <div className="flex flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-40 border-b border-white/8 bg-[rgba(9,16,28,0.82)] backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-8 px-4 py-4 sm:px-6 xl:px-8">
+        <div className="shrink-0">
           <BrandLogo href="/" showTagline />
-          <span className="hidden text-sm text-slate-400 lg:inline">
-            The financial operating system for short-term rental hosts
-          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5">
-          <nav className="flex flex-wrap items-center gap-4 text-sm">
-            <Link href="/" className={navLinkClassName(activePage === "home")}>
-              Home
+        <nav className="hidden flex-1 items-center justify-center gap-10 text-sm font-medium lg:flex xl:gap-14">
+          {navItems.map((item) => (
+            <Link key={item.label} href={item.href} className={navLinkClassName(item.active)}>
+              {item.label}
             </Link>
-            <Link href="/pricing" className={navLinkClassName(activePage === "pricing")}>
-              Pricing
-            </Link>
-          </nav>
-
-          <Link
-            href={signedIn ? "/dashboard" : "/login"}
-            className="brand-button rounded-2xl px-4 py-3 text-sm font-semibold transition"
-          >
-            {signedIn ? "Open dashboard" : "Sign in"}
-          </Link>
-        </div>
+          ))}
+        </nav>
       </div>
     </header>
   );

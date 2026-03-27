@@ -133,7 +133,7 @@ export default async function LandingPage() {
 
   return (
     <>
-      <MarketingHeader activePage="home" signedIn={signedIn} />
+      <MarketingHeader activePage="home" />
 
       <main className="pb-16">
         <section id="hero" className="relative min-h-screen overflow-hidden">

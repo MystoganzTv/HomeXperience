@@ -66,7 +66,7 @@ export default async function PricingPage() {
 
   return (
     <>
-      <MarketingHeader activePage="pricing" signedIn={signedIn} />
+      <MarketingHeader activePage="pricing" />
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-10 sm:px-6 xl:px-8">
         <section className="text-center">

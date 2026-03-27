@@ -63,8 +63,8 @@ export function BrandLogo({
             Hostlyx
           </span>
           {showTagline ? (
-            <span className="block text-[11px] uppercase tracking-[0.18em] text-slate-500">
-              Finance OS for rental hosts
+            <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">
+              Finance OS
             </span>
           ) : null}
         </span>
