@@ -151,7 +151,9 @@ export function WorkspaceShell({
                       {currencyCode} workspace
                     </p>
                   </div>
-                  {subscriptionBadge ? (
+                  {subscriptionBadge &&
+                  subscriptionBadge.tone !== "trial" &&
+                  subscriptionBadge.tone !== "expired" ? (
                     <span
                       className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${subscriptionBadgeClassName(subscriptionBadge.tone)}`}
                     >
