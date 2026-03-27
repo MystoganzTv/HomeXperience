@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { startTransition, useEffect } from "react";
 import { Funnel } from "lucide-react";
+import { WorkspaceSelect } from "@/components/workspace-select";
 import { getMarketDefinition } from "@/lib/markets";
 import type { CountryCode } from "@/lib/types";
 
@@ -23,10 +24,6 @@ const monthOptions = [
 ];
 
 const filterStorageKey = "hostlyx:filters";
-
-function selectClassName() {
-  return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
-}
 
 export function FilterBar({
   years,
@@ -161,43 +158,35 @@ export function FilterBar({
           );
         })}
       </div>
-      <select
-        className={`${selectClassName()} min-w-[150px]`}
+      <WorkspaceSelect
+        compact
+        className="min-w-[150px]"
         value={String(selectedYear)}
-        onChange={(event) => updateFilter("year", event.target.value)}
-      >
-        <option value="all">All Years</option>
-        {years.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => updateFilter("year", value)}
+        options={[
+          { value: "all", label: "All Years" },
+          ...years.map((year) => ({ value: String(year), label: String(year) })),
+        ]}
+      />
       {showMonthSelect ? (
-        <select
-          className={`${selectClassName()} min-w-[170px]`}
+        <WorkspaceSelect
+          compact
+          className="min-w-[170px]"
           value={String(selectedMonth)}
-          onChange={(event) => updateFilter("month", event.target.value)}
-        >
-          {monthOptions.map((month) => (
-            <option key={month.value} value={month.value}>
-              {month.label}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => updateFilter("month", value)}
+          options={monthOptions}
+        />
       ) : null}
-      <select
-        className={`${selectClassName()} min-w-[170px]`}
+      <WorkspaceSelect
+        compact
+        className="min-w-[170px]"
         value={selectedChannel}
-        onChange={(event) => updateFilter("channel", event.target.value)}
-      >
-        <option value="all">All Channels</option>
-        {channels.map((channel) => (
-          <option key={channel} value={channel}>
-            {channel}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => updateFilter("channel", value)}
+        options={[
+          { value: "all", label: "All Channels" },
+          ...channels.map((channel) => ({ value: channel, label: channel })),
+        ]}
+      />
     </div>
   );
 }

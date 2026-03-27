@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { PropertyDefinition } from "@/lib/types";
+import { WorkspaceSelect } from "@/components/workspace-select";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 type FileStatus = "checking" | "ready" | "duplicate-existing" | "duplicate-selection" | "error";
@@ -42,10 +43,6 @@ type ImportResponsePayload = {
   error?: string;
   message?: string;
 };
-
-function inputClassName() {
-  return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
-}
 
 function formatFileSize(size: number) {
   if (size >= 1024 * 1024) {
@@ -547,17 +544,19 @@ export function UploadPanel({
               Target property
             </span>
             {properties.length > 1 ? (
-              <select
-                className={inputClassName()}
+              <WorkspaceSelect
                 value={selectedPropertyName}
-                onChange={(event) => setSelectedPropertyName(event.target.value)}
-              >
-                {properties.map((property) => (
-                  <option key={property.id ?? property.name} value={property.name}>
-                    {property.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedPropertyName}
+                options={properties.map((property) => ({
+                  value: property.name,
+                  label: property.name,
+                  description:
+                    property.units.length > 0
+                      ? `${property.units.length} unit${property.units.length === 1 ? "" : "s"}`
+                      : "Single-home property",
+                }))}
+                placeholder="Select a property"
+              />
             ) : (
               <div className="rounded-[18px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm text-[var(--workspace-text)]">
                 {selectedPropertyName}

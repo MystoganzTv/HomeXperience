@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { PencilLine } from "lucide-react";
+import { PencilLine, ReceiptText, ScrollText } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
 import { WorkspaceDateField } from "@/components/workspace-date-field";
 import type { PropertyDefinition } from "@/lib/types";
@@ -22,6 +22,7 @@ export function ManualEntryPanel({
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [expenseMessage, setExpenseMessage] = useState<string | null>(null);
   const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [activeEntryType, setActiveEntryType] = useState<"booking" | "expense">("booking");
 
   function submitForm(
     endpoint: "/api/bookings" | "/api/expenses",
@@ -96,8 +97,59 @@ export function ManualEntryPanel({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <form action={handleBookingSubmit} className="space-y-4">
+      <div className="mt-6 space-y-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveEntryType("booking")}
+            className={`rounded-[24px] border p-4 text-left transition ${
+              activeEntryType === "booking"
+                ? "border-[var(--workspace-accent)] bg-[var(--workspace-accent-soft)] shadow-[0_0_0_1px_rgba(88,196,182,0.16)]"
+                : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] hover:border-[var(--workspace-accent)]/30"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="workspace-icon-chip rounded-2xl p-3">
+                <ScrollText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--workspace-text)]">Add Booking</p>
+                <p className="mt-1 text-xs text-[var(--workspace-muted)]">
+                  Capture stays, guests, pricing, and payout.
+                </p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveEntryType("expense")}
+            className={`rounded-[24px] border p-4 text-left transition ${
+              activeEntryType === "expense"
+                ? "border-rose-300/30 bg-rose-400/10 shadow-[0_0_0_1px_rgba(236,143,150,0.12)]"
+                : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] hover:border-rose-300/20"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-rose-400/12 p-3 text-rose-200">
+                <ReceiptText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--workspace-text)]">Add Expense</p>
+                <p className="mt-1 text-xs text-[var(--workspace-muted)]">
+                  Log costs, categories, and notes cleanly.
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {activeEntryType === "booking" ? (
+        <form action={handleBookingSubmit} className="workspace-soft-card rounded-[26px] p-4 sm:p-5 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-[var(--workspace-text)]">Booking details</p>
+            <p className="mt-1 text-sm text-[var(--workspace-muted)]">Use this when you want to add a stay manually.</p>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <WorkspaceDateField name="checkIn" label="Check-in" placeholder="Select check-in" required />
             <WorkspaceDateField name="checkout" label="Checkout" placeholder="Select checkout" required />
@@ -163,8 +215,12 @@ export function ManualEntryPanel({
             {bookingError ? <p className="text-sm text-rose-500">{bookingError}</p> : null}
           </div>
         </form>
-
-        <form action={handleExpenseSubmit} className="space-y-4">
+        ) : (
+        <form action={handleExpenseSubmit} className="workspace-soft-card rounded-[26px] p-4 sm:p-5 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-[var(--workspace-text)]">Expense details</p>
+            <p className="mt-1 text-sm text-[var(--workspace-muted)]">Use this for bills, cleaning, supplies, repairs, and operating costs.</p>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <WorkspaceDateField name="date" label="Date" placeholder="Select expense date" required />
             <label className="space-y-2">
@@ -205,6 +261,7 @@ export function ManualEntryPanel({
             {expenseError ? <p className="text-sm text-rose-500">{expenseError}</p> : null}
           </div>
         </form>
+        )}
       </div>
     </div>
   );
