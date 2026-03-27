@@ -124,12 +124,10 @@ export function WorkspaceShell({
     return "border-amber-300/16 bg-amber-400/10 text-amber-50";
   }
 
-  const navItems = isAdminOwnerEmail(userEmail)
-    ? [
-      ...baseNavItems,
-      { id: "admin" as const, label: "Admin Panel", href: "/dashboard/admin", icon: Shield },
-    ]
-    : baseNavItems;
+  const mainNavItems = baseNavItems;
+  const adminNavItem = isAdminOwnerEmail(userEmail)
+    ? { id: "admin" as const, label: "Admin Panel", href: "/dashboard/admin", icon: Shield }
+    : null;
 
   return (
     <main className="min-h-screen bg-[var(--workspace-bg)] px-4 py-5 sm:px-6 xl:h-screen xl:overflow-hidden xl:px-8 xl:py-6">
@@ -200,7 +198,7 @@ export function WorkspaceShell({
           </div>
 
           <nav className={`mt-6 grid gap-2 ${isCollapsed ? "xl:grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-1"}`}>
-            {navItems.map((item) => {
+            {mainNavItems.map((item) => {
               const Icon = item.icon;
 
               return (
@@ -218,6 +216,23 @@ export function WorkspaceShell({
                 </Link>
               );
             })}
+
+            {adminNavItem ? (
+              <div className={isCollapsed ? "mt-2 pt-2" : "mt-3 pt-3"}>
+                <div className="mb-2 border-t border-white/8" />
+                <Link
+                  href={adminNavItem.href}
+                  className={`${navClassName(activePage === adminNavItem.id)} ${isCollapsed ? "justify-center px-3" : ""}`}
+                  title={adminNavItem.label}
+                >
+                  <Shield className="h-4 w-4 shrink-0" />
+                  {!isCollapsed ? <span className="min-w-0 truncate">{adminNavItem.label}</span> : null}
+                  {activePage === adminNavItem.id && !isCollapsed ? (
+                    <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--workspace-accent)]" />
+                  ) : null}
+                </Link>
+              </div>
+            ) : null}
           </nav>
 
           <div className={`mt-10 border-t border-white/8 ${isCollapsed ? "pt-4" : "space-y-4 pt-8"}`}>
