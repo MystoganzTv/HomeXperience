@@ -148,6 +148,16 @@ function drawMetricCard(
   const valueColor = rgb(0.03, 0.07, 0.15);
   const helperColor = rgb(0.4, 0.45, 0.53);
   const top = options.y + options.height - 18;
+  const compactCard = !options.emphasis && options.height < 70;
+  const valueSize = options.emphasis ? 30 : compactCard ? 16 : 21;
+  const valueY = options.emphasis
+    ? options.y + options.height - 78
+    : options.y + options.height - (compactCard ? 42 : 46);
+  const helperTop = options.emphasis
+    ? options.y + 30
+    : options.y + (compactCard ? 14 : 16);
+  const helperSize = compactCard ? 8.8 : 9.5;
+  const helperLines = options.emphasis ? 2 : 1;
 
   drawRect(page, {
     x: options.x,
@@ -162,8 +172,8 @@ function drawMetricCard(
   drawLabel(page, fonts.semibold, options.label, options.x + 16, top, labelColor);
   page.drawText(options.value, {
     x: options.x + 16,
-    y: options.y + (options.emphasis ? options.height - 82 : options.height - 60),
-    size: options.emphasis ? 33 : 22,
+    y: valueY,
+    size: valueSize,
     font: fonts.semibold,
     color: valueColor,
   });
@@ -173,12 +183,12 @@ function drawMetricCard(
     fonts.regular,
     options.helper,
     options.x + 16,
-    options.y + (options.emphasis ? 58 : 44),
+    helperTop,
     options.width - 32,
-    10.5,
+    helperSize,
     helperColor,
-    14,
-    options.emphasis ? 2 : 2,
+    compactCard ? 10.5 : 12,
+    helperLines,
   );
 }
 
@@ -206,20 +216,20 @@ function drawDetailCard(
 
   drawLabel(page, fonts.semibold, options.title, options.x + 16, options.y + options.height - 18, rgb(0.44, 0.5, 0.61));
 
-  let cursorY = options.y + options.height - 44;
+  let cursorY = options.y + options.height - 34;
 
   for (const [index, row] of options.rows.entries()) {
     page.drawText(row.label, {
       x: options.x + 16,
-      y: cursorY - 12,
-      size: 11.5,
+      y: cursorY - 11,
+      size: 10.8,
       font: fonts.semibold,
       color: rgb(0.08, 0.12, 0.2),
     });
     page.drawText(row.value, {
-      x: options.x + options.width - 16 - fonts.semibold.widthOfTextAtSize(row.value, 11.5),
-      y: cursorY - 12,
-      size: 11.5,
+      x: options.x + options.width - 16 - fonts.semibold.widthOfTextAtSize(row.value, 10.8),
+      y: cursorY - 11,
+      size: 10.8,
       font: fonts.semibold,
       color: rgb(0.08, 0.12, 0.2),
     });
@@ -228,15 +238,15 @@ function drawDetailCard(
       fonts.regular,
       row.sublabel,
       options.x + 16,
-      cursorY - 18,
+      cursorY - 15,
       options.width - 32,
-      9.5,
+      8.8,
       rgb(0.44, 0.5, 0.61),
-      12.5,
+      10,
       1,
     );
 
-    cursorY -= 42;
+    cursorY -= 29;
 
     if (index < options.rows.length - 1) {
       page.drawLine({
@@ -293,8 +303,8 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
 
   const headerLeftWidth = 470;
   const metaCardWidth = contentWidth - headerLeftWidth - 20;
-  const metaCardHeight = 55;
-  const metaGap = 10;
+  const metaCardHeight = 44;
+  const metaGap = 8;
 
   drawLabel(page, semibold, "Hostlyx Financial Summary", contentX, contentTop - 2, rgb(0.44, 0.5, 0.61));
   page.drawText(input.businessName, {
@@ -323,7 +333,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
   const metaRows = [
     { label: "Reporting period", value: input.view.rangeLabel },
     { label: "Generated", value: input.generatedAt },
-    { label: "Source file", value: input.latestImportFileName ? truncateMiddle(input.latestImportFileName, 38) : "No file attached" },
+    { label: "Source file", value: input.latestImportFileName ? truncateMiddle(input.latestImportFileName, 30) : "No file attached" },
   ];
 
   metaRows.forEach((row, index) => {
@@ -348,11 +358,11 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
       row.label === "Source file" ? 10 : 11.5,
       rgb(0.08, 0.12, 0.2),
       13,
-      row.label === "Source file" ? 2 : 1,
+      1,
     );
   });
 
-  const dividerY = contentTop - 151;
+  const dividerY = contentTop - 166;
   page.drawLine({
     start: { x: contentX, y: dividerY },
     end: { x: contentX + contentWidth, y: dividerY },
@@ -361,7 +371,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
   });
 
   const summaryTop = dividerY - 12;
-  const heroHeight = 120;
+  const heroHeight = 100;
   const sideWidth = 206;
   const heroWidth = contentWidth - sideWidth - 16;
   const heroY = summaryTop - heroHeight;
@@ -400,7 +410,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
   });
 
   const metricTop = heroY - 14;
-  const metricHeight = 78;
+  const metricHeight = 68;
   const metricGap = 12;
   const smallMetricWidth = (contentWidth - metricGap * 3) / 4;
   const smallMetricY = metricTop - metricHeight;
@@ -438,7 +448,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
   });
 
   const detailTop = smallMetricY - 14;
-  const detailHeight = 122;
+  const detailHeight = 108;
   const detailGap = 14;
   const detailWidth = (contentWidth - detailGap) / 2;
   const detailY = detailTop - detailHeight;
@@ -469,34 +479,21 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
     })),
   });
 
-  const footerText = [
-    "Report generated by Hostlyx from imported bookings and expenses.",
-    input.latestImportFileName ? `Latest source: ${truncateMiddle(input.latestImportFileName, 58)}.` : "",
-    input.view.monthlySummary[0]?.label && input.view.monthlySummary.at(-1)?.label
-      ? `Coverage: ${input.view.monthlySummary[0].label} to ${input.view.monthlySummary.at(-1)?.label}.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  page.drawLine({
-    start: { x: contentX, y: contentY + 34 },
-    end: { x: contentX + contentWidth, y: contentY + 34 },
-    thickness: 1,
-    color: rgb(0.9, 0.93, 0.96),
-  });
+  const footerText = input.view.monthlySummary[0]?.label && input.view.monthlySummary.at(-1)?.label
+    ? `Coverage: ${input.view.monthlySummary[0].label} to ${input.view.monthlySummary.at(-1)?.label}. Generated by Hostlyx.`
+    : "Generated by Hostlyx from imported bookings and expenses.";
 
   drawTextBlock(
     page,
     regular,
     footerText,
     contentX,
-    contentY + 24,
+    contentY + 18,
     contentWidth,
-    9.5,
+    8.6,
     rgb(0.44, 0.5, 0.61),
-    12,
-    2,
+    10,
+    1,
   );
 
   return pdf.save();
