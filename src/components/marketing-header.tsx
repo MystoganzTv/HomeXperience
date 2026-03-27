@@ -9,8 +9,12 @@ function navLinkClassName(active: boolean) {
 
 export function MarketingHeader({
   activePage,
+  signedIn,
+  primaryHref,
 }: {
   activePage: "home" | "pricing";
+  signedIn: boolean;
+  primaryHref: string;
 }) {
   const navItems = [
     { label: "Inicio", href: activePage === "home" ? "#hero" : "/#hero", active: activePage === "home" },
@@ -34,6 +38,21 @@ export function MarketingHeader({
             </Link>
           ))}
         </nav>
+
+        <div className="hidden shrink-0 items-center gap-3 lg:flex">
+          <Link
+            href={signedIn ? primaryHref : "/login"}
+            className="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-white/[0.04] hover:text-slate-100"
+          >
+            {signedIn ? "Dashboard" : "Iniciar sesión"}
+          </Link>
+          <Link
+            href={primaryHref}
+            className="brand-button inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold transition"
+          >
+            {signedIn ? "Abrir app" : "Empieza gratis"}
+          </Link>
+        </div>
       </div>
     </header>
   );

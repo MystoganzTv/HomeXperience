@@ -24,7 +24,7 @@ const heroImage =
 const dashboardImage =
   "https://media.base44.com/images/public/69c6f86f5aab8f97e00c6c1d/714134a36_generated_db69c040.png";
 const hostAvatars = [
-  "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=64&h=64&fit=crop&crop=face",
+  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=64&h=64&fit=crop&crop=face",
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=64&h=64&fit=crop&crop=face",
   "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=64&h=64&fit=crop&crop=face",
   "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=64&h=64&fit=crop&crop=face",
@@ -133,7 +133,7 @@ export default async function LandingPage() {
 
   return (
     <>
-      <MarketingHeader activePage="home" />
+      <MarketingHeader activePage="home" signedIn={signedIn} primaryHref={dashboardHref} />
 
       <main className="pb-16">
         <section id="hero" className="relative min-h-screen overflow-hidden">
