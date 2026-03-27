@@ -1,4 +1,7 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import type { DashboardView } from "@/lib/types";
 
@@ -20,6 +23,43 @@ const contentY = pageMargin + sheetInset;
 const contentWidth = sheetWidth - sheetInset * 2;
 const contentTop = pageHeight - pageMargin - sheetInset;
 
+const brandFontFiles = {
+  regular: path.join(process.cwd(), "node_modules/@fontsource/manrope/files/manrope-latin-400-normal.woff"),
+  semibold: path.join(process.cwd(), "node_modules/@fontsource/manrope/files/manrope-latin-700-normal.woff"),
+  mono: path.join(process.cwd(), "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff"),
+} as const;
+
+const brandFontDataPromise = Promise.all([
+  readFile(brandFontFiles.regular),
+  readFile(brandFontFiles.semibold),
+  readFile(brandFontFiles.mono),
+]);
+
+type PdfFonts = {
+  regular: PDFFont;
+  semibold: PDFFont;
+  mono: PDFFont;
+};
+
+function roundedRectPath(x: number, y: number, width: number, height: number, radius: number) {
+  const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  const right = x + width;
+  const top = y + height;
+
+  return [
+    `M ${x + safeRadius} ${y}`,
+    `L ${right - safeRadius} ${y}`,
+    `Q ${right} ${y} ${right} ${y + safeRadius}`,
+    `L ${right} ${top - safeRadius}`,
+    `Q ${right} ${top} ${right - safeRadius} ${top}`,
+    `L ${x + safeRadius} ${top}`,
+    `Q ${x} ${top} ${x} ${top - safeRadius}`,
+    `L ${x} ${y + safeRadius}`,
+    `Q ${x} ${y} ${x + safeRadius} ${y}`,
+    "Z",
+  ].join(" ");
+}
+
 function drawRect(
   page: PDFPage,
   options: {
@@ -30,8 +70,18 @@ function drawRect(
     fill: ReturnType<typeof rgb>;
     border?: ReturnType<typeof rgb>;
     borderWidth?: number;
+    radius?: number;
   },
 ) {
+  if ((options.radius ?? 0) > 0) {
+    page.drawSvgPath(roundedRectPath(options.x, options.y, options.width, options.height, options.radius ?? 0), {
+      color: options.fill,
+      borderColor: options.border,
+      borderWidth: options.borderWidth ?? 0,
+    });
+    return;
+  }
+
   page.drawRectangle({
     x: options.x,
     y: options.y,
@@ -121,8 +171,8 @@ function drawLabel(
 ) {
   page.drawText(text.toUpperCase(), {
     x,
-    y: topY - 10,
-    size: 9,
+    y: topY - 9,
+    size: 8.6,
     font,
     color,
   });
@@ -130,7 +180,7 @@ function drawLabel(
 
 function drawMetricCard(
   page: PDFPage,
-  fonts: { regular: PDFFont; semibold: PDFFont },
+  fonts: PdfFonts,
   options: {
     x: number;
     y: number;
@@ -167,9 +217,10 @@ function drawMetricCard(
     fill,
     border,
     borderWidth: 1,
+    radius: options.emphasis ? 18 : 16,
   });
 
-  drawLabel(page, fonts.semibold, options.label, options.x + 16, top, labelColor);
+  drawLabel(page, fonts.mono, options.label, options.x + 16, top, labelColor);
   page.drawText(options.value, {
     x: options.x + 16,
     y: valueY,
@@ -196,7 +247,7 @@ function drawMetricCard(
 
 function drawDetailCard(
   page: PDFPage,
-  fonts: { regular: PDFFont; semibold: PDFFont },
+  fonts: PdfFonts,
   options: {
     x: number;
     y: number;
@@ -214,9 +265,10 @@ function drawDetailCard(
     fill: rgb(1, 1, 1),
     border: rgb(0.87, 0.9, 0.94),
     borderWidth: 1,
+    radius: 16,
   });
 
-  drawLabel(page, fonts.semibold, options.title, options.x + 16, options.y + options.height - 18, rgb(0.44, 0.5, 0.61));
+  drawLabel(page, fonts.mono, options.title, options.x + 16, options.y + options.height - 18, rgb(0.44, 0.5, 0.61));
 
   let cursorY = options.y + options.height - 34;
 
@@ -273,11 +325,14 @@ function truncateMiddle(value: string, maxLength: number) {
 
 export async function generateShareReportPdf(input: ShareReportPdfInput) {
   const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
   const page = pdf.addPage([pageWidth, pageHeight]);
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const semibold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const [regularBytes, semiboldBytes, monoBytes] = await brandFontDataPromise;
+  const regular = await pdf.embedFont(regularBytes, { subset: true });
+  const semibold = await pdf.embedFont(semiboldBytes, { subset: true });
+  const mono = await pdf.embedFont(monoBytes, { subset: true });
 
-  const fonts = { regular, semibold };
+  const fonts: PdfFonts = { regular, semibold, mono };
   const topExpenseCategories = input.view.expensesByCategory.slice(0, 3);
   const totalExpenses = input.view.expensesByCategory.reduce((sum, item) => sum + item.value, 0);
   const topChannels = input.view.revenueByChannel
@@ -301,6 +356,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
     fill: rgb(0.99, 0.995, 1),
     border: rgb(0.88, 0.91, 0.95),
     borderWidth: 1,
+    radius: 24,
   });
 
   const headerLeftWidth = 470;
@@ -308,7 +364,7 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
   const metaCardHeight = 44;
   const metaGap = 8;
 
-  drawLabel(page, semibold, "Hostlyx Financial Summary", contentX, contentTop - 2, rgb(0.44, 0.5, 0.61));
+  drawLabel(page, mono, "Hostlyx Financial Summary", contentX, contentTop - 2, rgb(0.44, 0.5, 0.61));
   page.drawText(input.businessName, {
     x: contentX,
     y: contentTop - 55,
@@ -348,8 +404,9 @@ export async function generateShareReportPdf(input: ShareReportPdfInput) {
       fill: rgb(1, 1, 1),
       border: rgb(0.87, 0.9, 0.94),
       borderWidth: 1,
+      radius: 14,
     });
-    drawLabel(page, semibold, row.label, metaX + 14, y + metaCardHeight - 12, rgb(0.44, 0.5, 0.61));
+    drawLabel(page, mono, row.label, metaX + 14, y + metaCardHeight - 12, rgb(0.44, 0.5, 0.61));
     drawTextBlock(
       page,
       row.label === "Source file" ? regular : semibold,
