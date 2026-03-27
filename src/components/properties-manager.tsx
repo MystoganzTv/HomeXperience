@@ -29,16 +29,18 @@ export function PropertiesManager({
   properties,
   summaries,
   forceCreateOnEmpty = false,
+  defaultCountryCode = "US",
 }: {
   properties: PropertyDefinition[];
   summaries: PropertySummary[];
   forceCreateOnEmpty?: boolean;
+  defaultCountryCode?: CountryCode;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isCreateOpen, setIsCreateOpen] = useState(forceCreateOnEmpty);
   const [propertyName, setPropertyName] = useState("");
-  const [propertyCountryCode, setPropertyCountryCode] = useState<CountryCode>("US");
+  const [propertyCountryCode, setPropertyCountryCode] = useState<CountryCode>(defaultCountryCode);
   const [propertyMode, setPropertyMode] = useState<"single" | "multi">("single");
   const [unitCount, setUnitCount] = useState("2");
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
@@ -51,7 +53,7 @@ export function PropertiesManager({
 
   function resetCreateState() {
     setPropertyName("");
-    setPropertyCountryCode("US");
+    setPropertyCountryCode(defaultCountryCode);
     setPropertyMode("single");
     setUnitCount("2");
   }

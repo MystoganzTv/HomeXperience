@@ -224,6 +224,7 @@ export default async function PropertiesPage() {
             properties={propertyDefinitions}
             summaries={properties}
             forceCreateOnEmpty={isSetupMode}
+            defaultCountryCode={userSettings.primaryCountryCode}
           />
         </SectionCard>
       </div>

@@ -3,7 +3,7 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Globe2, Settings2 } from "lucide-react";
-import { marketDefinitions } from "@/lib/markets";
+import { getMarketDefinition, marketDefinitions } from "@/lib/markets";
 import type { CountryCode } from "@/lib/types";
 
 function inputClassName() {
@@ -23,6 +23,10 @@ export function BusinessSettingsPanel({
   const [primaryCountryCode, setPrimaryCountryCode] = useState<CountryCode>(initialPrimaryCountryCode);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectedMarket = getMarketDefinition(primaryCountryCode);
+  const hasChanges =
+    businessName.trim() !== initialBusinessName.trim() ||
+    primaryCountryCode !== initialPrimaryCountryCode;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -136,12 +140,64 @@ export function BusinessSettingsPanel({
           </p>
         </div>
 
+        <div className="workspace-soft-card rounded-[24px] p-4">
+          <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
+            <div>
+              <p className="text-sm font-semibold text-[var(--workspace-text)]">What changes when you save</p>
+              <p className="mt-1 text-xs text-[var(--workspace-muted)]">
+                Hostlyx will treat {selectedMarket.countryName} as your default reporting market.
+              </p>
+            </div>
+            <span className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
+              {selectedMarket.currencyCode}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-[18px] bg-white/[0.03] p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                Default currency
+              </p>
+              <p className="mt-3 text-base font-semibold text-[var(--workspace-text)]">
+                {selectedMarket.currencyCode} • {selectedMarket.currencyLabel}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                Dashboard, reports, cashflow, monthly, and performance use this as the fallback display currency.
+              </p>
+            </div>
+
+            <div className="rounded-[18px] bg-white/[0.03] p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                All-countries view
+              </p>
+              <p className="mt-3 text-base font-semibold text-[var(--workspace-text)]">
+                {selectedMarket.countryName}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                When filters are on `All countries`, Hostlyx uses this market as the portfolio default for labels and summaries.
+              </p>
+            </div>
+
+            <div className="rounded-[18px] bg-white/[0.03] p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                New property default
+              </p>
+              <p className="mt-3 text-base font-semibold text-[var(--workspace-text)]">
+                Starts in {selectedMarket.shortLabel}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                New property setup will start from this market so your portfolio structure matches your reporting default.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || !hasChanges}
           className="workspace-button-primary inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Saving settings..." : "Save settings"}
+          {isPending ? "Saving settings..." : hasChanges ? `Save settings for ${selectedMarket.countryName}` : "Settings are up to date"}
         </button>
       </form>
 
