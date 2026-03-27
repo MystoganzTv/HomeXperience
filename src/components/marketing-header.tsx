@@ -16,7 +16,7 @@ export function MarketingHeader({
 }) {
   return (
     <header className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 xl:px-8">
-      <div className="marketing-shell flex flex-col gap-4 rounded-[28px] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <BrandLogo href="/" showTagline />
           <span className="hidden text-sm text-slate-400 lg:inline">

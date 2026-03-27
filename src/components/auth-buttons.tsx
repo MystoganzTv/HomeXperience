@@ -5,9 +5,17 @@ import { signIn, signOut } from "next-auth/react";
 
 type SignInButtonProps = {
   disabled?: boolean;
+  className?: string;
+  icon?: ReactNode;
+  label?: string;
 };
 
-export function SignInButton({ disabled = false }: SignInButtonProps) {
+export function SignInButton({
+  disabled = false,
+  className,
+  icon,
+  label,
+}: SignInButtonProps) {
   return (
     <button
       type="button"
@@ -19,9 +27,13 @@ export function SignInButton({ disabled = false }: SignInButtonProps) {
         void signIn("google", { callbackUrl: "/dashboard" });
       }}
       disabled={disabled}
-      className="brand-button rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+      className={
+        className ??
+        "brand-button rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+      }
     >
-      {disabled ? "Google login not configured" : "Continue with Google"}
+      {icon}
+      {disabled ? "Google login not configured" : label ?? "Continue with Google"}
     </button>
   );
 }
