@@ -13,6 +13,7 @@ import {
   ReceiptText,
   UserCircle2,
   FileText,
+  Wallet,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { SignOutButton } from "@/components/auth-buttons";
@@ -42,6 +43,7 @@ const navItems: Array<{
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { id: "bookings", label: "Bookings", href: "/dashboard/bookings", icon: BookOpenText },
   { id: "expenses", label: "Expenses", href: "/dashboard/expenses", icon: ReceiptText },
+  { id: "cashflow", label: "Cashflow", href: "/dashboard/cashflow", icon: Wallet },
   { id: "performance", label: "Performance", href: "/dashboard/performance", icon: ChartNoAxesCombined },
   { id: "reports", label: "Reports", href: "/dashboard/reports", icon: FileText },
 ];
