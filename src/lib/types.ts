@@ -1,6 +1,11 @@
 export type ImportSource = "demo" | "upload" | "manual";
 export type CurrencyCode = "USD" | "EUR" | "GBP";
 export type CountryCode = "US" | "ES" | "GB";
+export type RevenueByChannelTotals = {
+  airbnb: number;
+  booking: number;
+  other: number;
+};
 
 export type BookingRecord = {
   id?: number;
@@ -68,6 +73,8 @@ export type UserSettings = {
   businessName: string;
   primaryCountryCode: CountryCode;
   currencyCode: CurrencyCode;
+  taxCountryCode: CountryCode;
+  taxRate: number;
 };
 
 export type PropertyUnit = {
@@ -97,6 +104,7 @@ export type MetricCard = {
 };
 
 export type MonthlyPoint = {
+  key?: string;
   label: string;
   revenue: number;
   payout: number;
@@ -137,6 +145,8 @@ export type DashboardView = {
     nights: number;
   }>;
   metrics: {
+    totalRevenue: number;
+    totalPayout: number;
     grossRevenue: number;
     netPayout: number;
     totalExpenses: number;
@@ -148,11 +158,20 @@ export type DashboardView = {
     adr: number;
     occupancyRate: number;
     revPar: number;
+    estimatedTaxes: number;
+    profitAfterTax: number;
+  };
+  taxSettings: {
+    countryCode: CountryCode;
+    taxRate: number;
+    suggestedTaxRate: number;
   };
   revenueByMonth: MonthlyPoint[];
   profitByMonth: MonthlyPoint[];
+  expensesByMonth: MonthlyPoint[];
   expensesByCategory: CategoryPoint[];
   revenueByChannel: ChannelPoint[];
+  revenueByChannelTotals: RevenueByChannelTotals;
   recentBookings: BookingRecord[];
   recentExpenses: ExpenseRecord[];
   monthlySummary: MonthlyPoint[];

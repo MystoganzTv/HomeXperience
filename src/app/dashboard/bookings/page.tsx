@@ -62,6 +62,8 @@ export default async function BookingsPage({
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
   const filteredBookings = filterBookingsForFilters({
     bookings,

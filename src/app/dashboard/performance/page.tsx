@@ -60,6 +60,8 @@ export default async function PerformancePage({
     filters: performanceFilters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
   const rangeLabel =
     performanceFilters.year === "all" ? "All imported months" : String(performanceFilters.year);

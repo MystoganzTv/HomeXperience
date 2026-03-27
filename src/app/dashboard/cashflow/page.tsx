@@ -60,6 +60,8 @@ export default async function CashflowPage({
     filters: cashflowFilters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
   const rangeLabel =
     cashflowFilters.year === "all" ? "All imported months" : String(cashflowFilters.year);

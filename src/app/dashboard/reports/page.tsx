@@ -61,6 +61,8 @@ export default async function ReportsPage({
     filters: reportFilters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
 
   return (

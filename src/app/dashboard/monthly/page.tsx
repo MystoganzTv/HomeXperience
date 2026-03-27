@@ -60,6 +60,8 @@ export default async function MonthlyPage({
     filters: monthlyFilters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
   const rangeLabel =
     monthlyFilters.year === "all" ? "All imported months" : String(monthlyFilters.year);

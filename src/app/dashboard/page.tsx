@@ -51,6 +51,8 @@ export default async function DashboardPage({
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
 
   return (

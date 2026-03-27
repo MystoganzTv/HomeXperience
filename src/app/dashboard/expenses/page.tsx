@@ -62,6 +62,8 @@ export default async function ExpensesPage({
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
+    taxCountryCode: userSettings.taxCountryCode,
+    taxRate: userSettings.taxRate,
   });
   const filteredExpenses = filterExpensesForFilters({
     expenses,

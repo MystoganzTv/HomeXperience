@@ -9,6 +9,7 @@ import {
   ReceiptText,
   TrendingUp,
   Wallet,
+  WalletCards,
 } from "lucide-react";
 import type {
   CurrencyCode,
@@ -19,6 +20,7 @@ import type {
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
 import { getMarketDefinition } from "@/lib/markets";
 import { ChartsPanel } from "@/components/charts-panel";
+import { TaxEstimationCard } from "@/components/dashboard/TaxEstimationCard";
 import { FilterBar } from "@/components/filter-bar";
 import { ManualEntryPanel } from "@/components/manual-entry-panel";
 import { Modal } from "@/components/modal";
@@ -196,7 +198,7 @@ export function DashboardShell({
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">Total Revenue</p>
                       <p className="mt-4 text-3xl font-semibold tracking-tight text-[var(--workspace-text)]">
-                        {formatCurrency(view.metrics.grossRevenue, false, currencyCode)}
+                        {formatCurrency(view.metrics.totalRevenue, false, currencyCode)}
                       </p>
                     </div>
                     <div className="workspace-icon-chip rounded-2xl p-3">
@@ -234,7 +236,7 @@ export function DashboardShell({
                 </article>
               </section>
 
-              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                 <article className="workspace-soft-card rounded-[24px] p-5">
                   <div className="flex items-center gap-3">
                     <div className="workspace-icon-chip rounded-2xl p-3">
@@ -243,7 +245,43 @@ export function DashboardShell({
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Net Payout</p>
                       <p className="mt-1 text-xl font-semibold text-[var(--workspace-text)]">
-                        {formatCurrency(view.metrics.netPayout, false, currencyCode)}
+                        {formatCurrency(view.metrics.totalPayout, false, currencyCode)}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+                <article className="workspace-soft-card rounded-[24px] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-white/[0.05] p-3 text-[var(--workspace-text)]">
+                      <ReceiptText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Estimated Taxes</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--workspace-text)]">
+                        {formatCurrency(view.metrics.estimatedTaxes, false, currencyCode)}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+                <article className="workspace-soft-card rounded-[24px] p-5">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`rounded-2xl p-3 ${
+                        view.metrics.profitAfterTax >= 0
+                          ? "bg-emerald-400/14 text-emerald-200"
+                          : "bg-rose-400/14 text-rose-200"
+                      }`}
+                    >
+                      <WalletCards className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Profit After Tax</p>
+                      <p
+                        className={`mt-1 text-xl font-semibold ${
+                          view.metrics.profitAfterTax >= 0 ? "text-emerald-300" : "text-rose-200"
+                        }`}
+                      >
+                        {formatCurrency(view.metrics.profitAfterTax, false, currencyCode)}
                       </p>
                     </div>
                   </div>
@@ -288,6 +326,17 @@ export function DashboardShell({
               </section>
             </>
           )}
+
+          <TaxEstimationCard
+            key={`${view.taxSettings.countryCode}-${view.taxSettings.taxRate}`}
+            initialCountryCode={view.taxSettings.countryCode}
+            initialTaxRate={view.taxSettings.taxRate}
+            netProfit={view.metrics.netProfit}
+            estimatedTaxes={view.metrics.estimatedTaxes}
+            profitAfterTax={view.metrics.profitAfterTax}
+            currencyCode={currencyCode}
+            mixedCurrencyMode={view.mixedCurrencyMode}
+          />
 
           <ChartsPanel
             monthlySummary={view.monthlySummary}

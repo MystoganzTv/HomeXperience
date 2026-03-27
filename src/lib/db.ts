@@ -19,6 +19,7 @@ import {
   getCurrencyForCountry,
   normalizeCountryCode,
 } from "./markets";
+import { getDefaultTaxRateByCountry, normalizeTaxRate } from "./tax";
 
 type SQLiteDatabase = import("better-sqlite3").Database;
 type SQLiteModule = typeof import("better-sqlite3");
@@ -111,6 +112,8 @@ function getDefaultUserSettings(fallbackBusinessName: string): UserSettings {
     businessName: fallbackBusinessName.trim() || "My rental business",
     primaryCountryCode,
     currencyCode: getCurrencyForCountry(primaryCountryCode),
+    taxCountryCode: primaryCountryCode,
+    taxRate: getDefaultTaxRateByCountry(primaryCountryCode),
   };
 }
 
@@ -232,6 +235,8 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       business_name TEXT NOT NULL,
       primary_country_code TEXT NOT NULL DEFAULT 'US',
       currency_code TEXT NOT NULL DEFAULT 'USD',
+      tax_country_code TEXT NOT NULL DEFAULT 'US',
+      tax_rate REAL NOT NULL DEFAULT 25,
       updated_at TEXT NOT NULL
     );
 
@@ -368,6 +373,14 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE user_settings ADD COLUMN primary_country_code TEXT NOT NULL DEFAULT 'US';");
   }
 
+  if (!hasColumn(db, "user_settings", "tax_country_code")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN tax_country_code TEXT NOT NULL DEFAULT 'US';");
+  }
+
+  if (!hasColumn(db, "user_settings", "tax_rate")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN tax_rate REAL NOT NULL DEFAULT 25;");
+  }
+
   if (!hasColumn(db, "properties", "country_code")) {
     db.exec("ALTER TABLE properties ADD COLUMN country_code TEXT NOT NULL DEFAULT 'US';");
   }
@@ -480,6 +493,8 @@ async function initializePostgresSchema() {
           business_name TEXT NOT NULL,
           primary_country_code TEXT NOT NULL DEFAULT 'US',
           currency_code TEXT NOT NULL DEFAULT 'USD',
+          tax_country_code TEXT NOT NULL DEFAULT 'US',
+          tax_rate DOUBLE PRECISION NOT NULL DEFAULT 25,
           updated_at TIMESTAMPTZ NOT NULL
         );
 
@@ -538,6 +553,14 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE user_settings
         ADD COLUMN IF NOT EXISTS primary_country_code TEXT NOT NULL DEFAULT 'US'
+      `);
+      await pool.query(`
+        ALTER TABLE user_settings
+        ADD COLUMN IF NOT EXISTS tax_country_code TEXT NOT NULL DEFAULT 'US'
+      `);
+      await pool.query(`
+        ALTER TABLE user_settings
+        ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION NOT NULL DEFAULT 25
       `);
       await pool.query(`
         ALTER TABLE properties
@@ -781,6 +804,8 @@ function cloneUserSettings(settings: StoredUserSettings): UserSettings {
     businessName: settings.businessName,
     primaryCountryCode: settings.primaryCountryCode,
     currencyCode: settings.currencyCode,
+    taxCountryCode: settings.taxCountryCode,
+    taxRate: settings.taxRate,
   };
 }
 
@@ -3373,7 +3398,9 @@ export async function getUserSettings(
         SELECT
           business_name AS businessName,
           primary_country_code AS primaryCountryCode,
-          currency_code AS currencyCode
+          currency_code AS currencyCode,
+          tax_country_code AS taxCountryCode,
+          tax_rate AS taxRate
         FROM user_settings
         WHERE owner_email = $1
       `,
@@ -3393,11 +3420,22 @@ export async function getUserSettings(
           ),
       ),
     );
+    const taxCountryCode = normalizeCountryCode(
+      String(
+        result.rows[0].taxcountrycode ??
+          result.rows[0].taxCountryCode ??
+          primaryCountryCode,
+      ),
+    );
 
     return {
       businessName: String(result.rows[0].businessname ?? result.rows[0].businessName ?? defaults.businessName),
       primaryCountryCode,
       currencyCode: getCurrencyForCountry(primaryCountryCode),
+      taxCountryCode,
+      taxRate: normalizeTaxRate(
+        result.rows[0].taxrate ?? result.rows[0].taxRate ?? getDefaultTaxRateByCountry(taxCountryCode),
+      ),
     };
   }
 
@@ -3414,7 +3452,9 @@ export async function getUserSettings(
         SELECT
           business_name AS businessName,
           primary_country_code AS primaryCountryCode,
-          currency_code AS currencyCode
+          currency_code AS currencyCode,
+          tax_country_code AS taxCountryCode,
+          tax_rate AS taxRate
         FROM user_settings
         WHERE owner_email = ?
       `,
@@ -3433,11 +3473,23 @@ export async function getUserSettings(
         ),
     ),
   );
+  const taxCountryCode = normalizeCountryCode(
+    String(
+      getRowValue(row, "taxCountryCode", "taxcountrycode") ?? primaryCountryCode,
+    ),
+  );
+  const rawTaxRate = getRowValue(row, "taxRate", "taxrate");
 
   return {
     businessName: String(getRowValue(row, "businessName", "businessname") ?? defaults.businessName),
     primaryCountryCode,
     currencyCode: getCurrencyForCountry(primaryCountryCode),
+    taxCountryCode,
+    taxRate: normalizeTaxRate(
+      typeof rawTaxRate === "number" || typeof rawTaxRate === "string"
+        ? rawTaxRate
+        : getDefaultTaxRateByCountry(taxCountryCode),
+    ),
   };
 }
 
@@ -3445,29 +3497,50 @@ export async function upsertUserSettings({
   ownerEmail,
   businessName,
   primaryCountryCode,
+  taxCountryCode,
+  taxRate,
 }: {
   ownerEmail: string;
   businessName: string;
   primaryCountryCode: CountryCode;
+  taxCountryCode?: CountryCode;
+  taxRate?: number;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
   const normalizedBusinessName = businessName.trim() || "My rental business";
   const normalizedPrimaryCountryCode = normalizeCountryCode(primaryCountryCode);
   const normalizedCurrencyCode = getCurrencyForCountry(normalizedPrimaryCountryCode);
+  const existingSettings = await getUserSettings(normalizedEmail, normalizedBusinessName);
+  const normalizedTaxCountryCode = normalizeCountryCode(
+    taxCountryCode ?? existingSettings.taxCountryCode ?? normalizedPrimaryCountryCode,
+  );
+  const normalizedTaxRate = normalizeTaxRate(
+    taxRate ?? existingSettings.taxRate ?? getDefaultTaxRateByCountry(normalizedTaxCountryCode),
+  );
   const updatedAt = new Date().toISOString();
 
   if (isPostgresConfigured()) {
     const pool = getPostgresPool();
     await pool.query(
       `
-        INSERT INTO user_settings (owner_email, business_name, primary_country_code, currency_code, updated_at)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO user_settings (
+          owner_email,
+          business_name,
+          primary_country_code,
+          currency_code,
+          tax_country_code,
+          tax_rate,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (owner_email)
         DO UPDATE SET
           business_name = EXCLUDED.business_name,
           primary_country_code = EXCLUDED.primary_country_code,
           currency_code = EXCLUDED.currency_code,
+          tax_country_code = EXCLUDED.tax_country_code,
+          tax_rate = EXCLUDED.tax_rate,
           updated_at = EXCLUDED.updated_at
       `,
       [
@@ -3475,6 +3548,8 @@ export async function upsertUserSettings({
         normalizedBusinessName,
         normalizedPrimaryCountryCode,
         normalizedCurrencyCode,
+        normalizedTaxCountryCode,
+        normalizedTaxRate,
         updatedAt,
       ],
     );
@@ -3490,6 +3565,8 @@ export async function upsertUserSettings({
       businessName: normalizedBusinessName,
       primaryCountryCode: normalizedPrimaryCountryCode,
       currencyCode: normalizedCurrencyCode,
+      taxCountryCode: normalizedTaxCountryCode,
+      taxRate: normalizedTaxRate,
     };
 
     if (existingIndex >= 0) {
@@ -3504,12 +3581,22 @@ export async function upsertUserSettings({
   const db = getSQLiteDatabase();
   db.prepare(
     `
-      INSERT INTO user_settings (owner_email, business_name, primary_country_code, currency_code, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO user_settings (
+        owner_email,
+        business_name,
+        primary_country_code,
+        currency_code,
+        tax_country_code,
+        tax_rate,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(owner_email) DO UPDATE SET
         business_name = excluded.business_name,
         primary_country_code = excluded.primary_country_code,
         currency_code = excluded.currency_code,
+        tax_country_code = excluded.tax_country_code,
+        tax_rate = excluded.tax_rate,
         updated_at = excluded.updated_at
     `,
   ).run(
@@ -3517,6 +3604,8 @@ export async function upsertUserSettings({
     normalizedBusinessName,
     normalizedPrimaryCountryCode,
     normalizedCurrencyCode,
+    normalizedTaxCountryCode,
+    normalizedTaxRate,
     updatedAt,
   );
 }

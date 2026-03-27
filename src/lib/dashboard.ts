@@ -7,22 +7,25 @@ import {
   startOfMonth,
   startOfYear,
 } from "date-fns";
+import {
+  calculateChannelData,
+  calculateExpenseCategories,
+  calculateMonthlyData,
+  calculateTotals,
+} from "./finance";
 import { getCurrencyForCountry, normalizeCountryCode } from "./markets";
+import { getDefaultTaxRateByCountry } from "./tax";
 import type {
   BookingRecord,
+  CategoryPoint,
   CountryCode,
   DashboardFilters,
   DashboardView,
   ExpenseRecord,
-  MonthlyPoint,
   PropertyDefinition,
 } from "./types";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-
-function sum(values: number[]) {
-  return values.reduce((total, value) => total + value, 0);
-}
 
 function matchesDateFilter(dateValue: string, year: number | "all", month: number | "all") {
   const date = parseISO(dateValue);
@@ -94,31 +97,6 @@ function getRangeFromFilters(
     end: endOfMonth(anchor),
     label: format(anchor, "MMMM yyyy"),
   };
-}
-
-function buildMonthlyBuckets(
-  filters: DashboardFilters,
-  bookings: BookingRecord[],
-  expenses: ExpenseRecord[],
-) {
-  const { start, end } = getRangeFromFilters(filters, bookings, expenses);
-  const months = eachMonthOfInterval({ start, end });
-
-  return months.map<MonthlyPoint>((month) => ({
-    label: format(month, filters.year === "all" ? "MMM yyyy" : "MMM"),
-    revenue: 0,
-    payout: 0,
-    expenses: 0,
-    profit: 0,
-    bookings: 0,
-    guests: 0,
-    nights: 0,
-  }));
-}
-
-function getMonthIndex(dateValue: string, buckets: MonthlyPoint[], filters: DashboardFilters) {
-  const label = format(parseISO(dateValue), filters.year === "all" ? "MMM yyyy" : "MMM");
-  return buckets.findIndex((bucket) => bucket.label === label);
 }
 
 function clampRatio(value: number) {
@@ -239,13 +217,18 @@ export function buildDashboardView({
   filters,
   properties,
   fallbackCountryCode,
+  taxCountryCode,
+  taxRate,
 }: {
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
   filters: DashboardFilters;
   properties: PropertyDefinition[];
   fallbackCountryCode: CountryCode;
+  taxCountryCode: CountryCode;
+  taxRate: number;
 }): DashboardView {
+  const normalizedTaxCountryCode = normalizeCountryCode(taxCountryCode);
   const propertyCountryMap = createPropertyCountryMap(properties, fallbackCountryCode);
   const availableYears = Array.from(
     new Set(
@@ -298,66 +281,41 @@ export function buildDashboardView({
   const filteredExpenses = countryFilteredExpenses.filter((expense) =>
     matchesDateFilter(expense.date, filters.year, filters.month),
   );
-
-  const grossRevenue = sum(filteredBookings.map((booking) => booking.totalRevenue));
-  const netPayout = sum(filteredBookings.map((booking) => booking.payout));
-  const totalExpenses = sum(filteredExpenses.map((expense) => expense.amount));
-  const netProfit = netPayout - totalExpenses;
-  const nightsBooked = sum(filteredBookings.map((booking) => booking.nights));
-  const bookingsCount = filteredBookings.length;
-  const guestsCount = sum(filteredBookings.map((booking) => booking.guestCount));
-  const rentalRevenue = sum(filteredBookings.map((booking) => booking.rentalRevenue));
-
-  const { start, end } = getRangeFromFilters(filters, countryFilteredBookings, countryFilteredExpenses);
-  const availableNights = Math.max(
-    1,
-    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+  const monthlyRange = getRangeFromFilters(
+    filters,
+    countryFilteredBookings,
+    countryFilteredExpenses,
+  );
+  const monthKeys = eachMonthOfInterval({
+    start: monthlyRange.start,
+    end: monthlyRange.end,
+  }).map((month) => format(month, "yyyy-MM"));
+  const totals = calculateTotals(
+    filteredBookings,
+    filteredExpenses,
+    taxRate,
+  );
+  const monthlyData = calculateMonthlyData(filteredBookings, filteredExpenses, {
+    monthKeys,
+    useYearInLabel: filters.year === "all",
+  });
+  const channelData = calculateChannelData(filteredBookings);
+  const expenseCategoryTotals = calculateExpenseCategories(filteredExpenses);
+  const guestsCount = filteredBookings.reduce(
+    (sum, booking) => sum + booking.guestCount,
+    0,
+  );
+  const rentalRevenue = filteredBookings.reduce(
+    (sum, booking) => sum + booking.rentalRevenue,
+    0,
   );
 
-  const buckets = buildMonthlyBuckets(filters, countryFilteredBookings, countryFilteredExpenses);
-
-  for (const booking of filteredBookings) {
-    const bucketIndex = getMonthIndex(booking.checkIn, buckets, filters);
-    if (bucketIndex >= 0) {
-      buckets[bucketIndex].revenue += booking.totalRevenue;
-      buckets[bucketIndex].payout += booking.payout;
-      buckets[bucketIndex].bookings += 1;
-      buckets[bucketIndex].guests += booking.guestCount;
-      buckets[bucketIndex].nights += booking.nights;
-    }
-  }
-
-  for (const expense of filteredExpenses) {
-    const bucketIndex = getMonthIndex(expense.date, buckets, filters);
-    if (bucketIndex >= 0) {
-      buckets[bucketIndex].expenses += expense.amount;
-    }
-  }
-
-  for (const bucket of buckets) {
-    bucket.profit = bucket.payout - bucket.expenses;
-  }
-
-  const expensesByCategoryMap = new Map<string, number>();
-  for (const expense of filteredExpenses) {
-    expensesByCategoryMap.set(
-      expense.category,
-      (expensesByCategoryMap.get(expense.category) ?? 0) + expense.amount,
-    );
-  }
-
-  const revenueByChannelMap = new Map<string, { revenue: number; bookings: number }>();
-  for (const booking of filteredBookings) {
-    const current = revenueByChannelMap.get(booking.channel) ?? {
-      revenue: 0,
-      bookings: 0,
-    };
-
-    revenueByChannelMap.set(booking.channel, {
-      revenue: current.revenue + booking.totalRevenue,
-      bookings: current.bookings + 1,
-    });
-  }
+  const availableNights = Math.max(
+    1,
+    Math.round(
+      (monthlyRange.end.getTime() - monthlyRange.start.getTime()) / (1000 * 60 * 60 * 24),
+    ) + 1,
+  );
 
   const marketBreakdownMap = new Map<
     CountryCode,
@@ -432,46 +390,52 @@ export function buildDashboardView({
 
   const displayCountryCode =
     filters.countryCode === "all" ? fallbackCountryCode : filters.countryCode;
-
+  const displayCurrencyCode = getCurrencyForCountry(displayCountryCode);
+  const expensesByCategory: CategoryPoint[] = Object.entries(expenseCategoryTotals)
+    .map(([label, value]) => ({ label, value }))
+    .sort((left, right) => right.value - left.value);
   return {
     availableYears,
     availableChannels,
     availableCountries,
     filters,
-    displayCurrencyCode: getCurrencyForCountry(displayCountryCode),
+    displayCurrencyCode,
     mixedCurrencyMode: filters.countryCode === "all" && availableCountries.length > 1,
     marketBreakdown,
     metrics: {
-      grossRevenue,
-      netPayout,
-      totalExpenses,
-      netProfit,
-      profitMargin: grossRevenue > 0 ? netProfit / grossRevenue : 0,
-      bookingsCount,
+      totalRevenue: totals.totalRevenue,
+      totalPayout: totals.totalPayout,
+      grossRevenue: totals.totalRevenue,
+      netPayout: totals.totalPayout,
+      totalExpenses: totals.totalExpenses,
+      netProfit: totals.netProfit,
+      profitMargin: totals.profitMargin,
+      bookingsCount: totals.totalBookings,
       guestsCount,
-      nightsBooked,
-      adr: nightsBooked > 0 ? rentalRevenue / nightsBooked : 0,
-      occupancyRate: clampRatio(nightsBooked / availableNights),
+      nightsBooked: totals.nightsBooked,
+      adr: totals.adr,
+      occupancyRate: clampRatio(totals.nightsBooked / availableNights),
       revPar: availableNights > 0 ? rentalRevenue / availableNights : 0,
+      estimatedTaxes: totals.estimatedTaxes,
+      profitAfterTax: totals.profitAfterTax,
     },
-    revenueByMonth: buckets.map((bucket) => ({ ...bucket })),
-    profitByMonth: buckets.map((bucket) => ({ ...bucket })),
-    expensesByCategory: Array.from(expensesByCategoryMap.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((left, right) => right.value - left.value),
-    revenueByChannel: Array.from(revenueByChannelMap.entries())
-      .map(([label, value]) => ({
-        label,
-        revenue: value.revenue,
-        bookings: value.bookings,
-      }))
-      .sort((left, right) => right.revenue - left.revenue),
+    taxSettings: {
+      countryCode: normalizedTaxCountryCode,
+      taxRate,
+      suggestedTaxRate: getDefaultTaxRateByCountry(normalizedTaxCountryCode),
+    },
+    revenueByMonth: monthlyData.revenueByMonth,
+    profitByMonth: monthlyData.profitByMonth,
+    expensesByMonth: monthlyData.expensesByMonth,
+    expensesByCategory,
+    revenueByChannel: channelData.chartData,
+    revenueByChannelTotals: channelData.revenueByChannel,
     recentBookings: [...filteredBookings]
       .sort((left, right) => right.checkIn.localeCompare(left.checkIn))
       .slice(0, 6),
     recentExpenses: [...filteredExpenses]
       .sort((left, right) => right.date.localeCompare(left.date))
       .slice(0, 6),
-    monthlySummary: buckets.map((bucket) => ({ ...bucket })),
+    monthlySummary: monthlyData.monthlySummary,
   };
 }
