@@ -11,6 +11,7 @@ import {
   ChevronsRight,
   DatabaseZap,
   LayoutDashboard,
+  LogOut,
   ReceiptText,
   UserCircle2,
 } from "lucide-react";
@@ -135,9 +136,11 @@ export function WorkspaceShell({
                 );
               })}
             </nav>
+          </div>
 
+          <div className={`border-t border-white/8 ${isCollapsed ? "pt-4" : "space-y-4 pt-6"}`}>
             {!isCollapsed ? (
-              <div className="mt-8 space-y-4 border-t border-white/8 pt-8 xl:mt-auto">
+              <>
                 <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-[var(--workspace-sidebar-muted)]">
                     Last import
@@ -160,8 +163,17 @@ export function WorkspaceShell({
                 </div>
 
                 <SignOutButton className="flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]" />
+              </>
+            ) : (
+              <div className="flex justify-center">
+                <SignOutButton
+                  label=""
+                  ariaLabel="Sign out"
+                  icon={<LogOut className="h-4 w-4" />}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
+                />
               </div>
-            ) : null}
+            )}
           </div>
         </aside>
 
