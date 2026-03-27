@@ -42,6 +42,11 @@ export function MonthlySummaryPanel({
           format: "number" as const,
         },
         {
+          label: "Guests",
+          value: view.metrics.guestsCount,
+          format: "number" as const,
+        },
+        {
           label: "Nights",
           value: view.metrics.nightsBooked,
           format: "number" as const,
@@ -66,6 +71,11 @@ export function MonthlySummaryPanel({
         {
           label: "Bookings",
           value: view.metrics.bookingsCount,
+          format: "number" as const,
+        },
+        {
+          label: "Guests",
+          value: view.metrics.guestsCount,
           format: "number" as const,
         },
       ];
@@ -136,7 +146,7 @@ export function MonthlySummaryPanel({
                 {topMonth.label}
               </p>
               <p className="mt-2 text-sm text-[var(--workspace-muted)]">
-                {formatNumber(topMonth.bookings)} bookings and {formatNumber(topMonth.nights)} nights
+                {formatNumber(topMonth.bookings)} bookings, {formatNumber(topMonth.guests)} guests, and {formatNumber(topMonth.nights)} nights
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -196,7 +206,7 @@ export function MonthlySummaryPanel({
                       {month.label}
                     </p>
                     <p className="mt-1 text-sm text-[var(--workspace-muted)]">
-                      {formatNumber(month.bookings)} bookings • {formatNumber(month.nights)} nights
+                      {formatNumber(month.bookings)} bookings • {formatNumber(month.guests)} guests • {formatNumber(month.nights)} nights
                     </p>
                   </div>
                   {!view.mixedCurrencyMode ? (
@@ -214,6 +224,14 @@ export function MonthlySummaryPanel({
                       </p>
                       <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
                         {formatNumber(month.bookings)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                        Guests
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                        {formatNumber(month.guests)}
                       </p>
                     </div>
                     <div>
@@ -272,6 +290,7 @@ export function MonthlySummaryPanel({
               <tr>
                 <th className="pb-3 pr-4 font-medium">Month</th>
                 <th className="pb-3 pr-4 font-medium">Bookings</th>
+                <th className="pb-3 pr-4 font-medium">Guests</th>
                 <th className="pb-3 pr-4 font-medium">Nights</th>
                 {!view.mixedCurrencyMode ? (
                   <>
@@ -292,6 +311,7 @@ export function MonthlySummaryPanel({
                   <tr key={month.label}>
                     <td className="py-4 pr-4 font-medium">{month.label}</td>
                     <td className="py-4 pr-4">{formatNumber(month.bookings)}</td>
+                    <td className="py-4 pr-4">{formatNumber(month.guests)}</td>
                     <td className="py-4 pr-4">{formatNumber(month.nights)}</td>
                     {!view.mixedCurrencyMode ? (
                       <>

@@ -49,6 +49,9 @@ export type CalendarClosureRecord = {
   date: string;
   reason: string;
   note: string;
+  statusLabel: string;
+  guestCount: number;
+  nights: number;
 };
 
 export type ImportSummary = {
@@ -100,6 +103,7 @@ export type MonthlyPoint = {
   expenses: number;
   profit: number;
   bookings: number;
+  guests: number;
   nights: number;
 };
 
@@ -129,6 +133,7 @@ export type DashboardView = {
     expenses: number;
     profit: number;
     bookings: number;
+    guests: number;
     nights: number;
   }>;
   metrics: {
@@ -138,6 +143,7 @@ export type DashboardView = {
     netProfit: number;
     profitMargin: number;
     bookingsCount: number;
+    guestsCount: number;
     nightsBooked: number;
     adr: number;
     occupancyRate: number;

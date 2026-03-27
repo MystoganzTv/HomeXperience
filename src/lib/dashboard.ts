@@ -111,6 +111,7 @@ function buildMonthlyBuckets(
     expenses: 0,
     profit: 0,
     bookings: 0,
+    guests: 0,
     nights: 0,
   }));
 }
@@ -251,6 +252,7 @@ export function buildDashboardView({
   const netProfit = netPayout - totalExpenses;
   const nightsBooked = sum(filteredBookings.map((booking) => booking.nights));
   const bookingsCount = filteredBookings.length;
+  const guestsCount = sum(filteredBookings.map((booking) => booking.guestCount));
   const rentalRevenue = sum(filteredBookings.map((booking) => booking.rentalRevenue));
 
   const { start, end } = getRangeFromFilters(filters, countryFilteredBookings, countryFilteredExpenses);
@@ -267,6 +269,7 @@ export function buildDashboardView({
       buckets[bucketIndex].revenue += booking.totalRevenue;
       buckets[bucketIndex].payout += booking.payout;
       buckets[bucketIndex].bookings += 1;
+      buckets[bucketIndex].guests += booking.guestCount;
       buckets[bucketIndex].nights += booking.nights;
     }
   }
@@ -311,6 +314,7 @@ export function buildDashboardView({
       expenses: number;
       profit: number;
       bookings: number;
+      guests: number;
       nights: number;
     }
   >();
@@ -327,12 +331,14 @@ export function buildDashboardView({
       expenses: 0,
       profit: 0,
       bookings: 0,
+      guests: 0,
       nights: 0,
     };
 
     current.revenue += booking.totalRevenue;
     current.payout += booking.payout;
     current.bookings += 1;
+    current.guests += booking.guestCount;
     current.nights += booking.nights;
     marketBreakdownMap.set(countryCode, current);
   }
@@ -349,6 +355,7 @@ export function buildDashboardView({
       expenses: 0,
       profit: 0,
       bookings: 0,
+      guests: 0,
       nights: 0,
     };
 
@@ -365,6 +372,7 @@ export function buildDashboardView({
       expenses: value.expenses,
       profit: value.payout - value.expenses,
       bookings: value.bookings,
+      guests: value.guests,
       nights: value.nights,
     }))
     .sort((left, right) => right.revenue - left.revenue);
@@ -387,6 +395,7 @@ export function buildDashboardView({
       netProfit,
       profitMargin: grossRevenue > 0 ? netProfit / grossRevenue : 0,
       bookingsCount,
+      guestsCount,
       nightsBooked,
       adr: nightsBooked > 0 ? rentalRevenue / nightsBooked : 0,
       occupancyRate: clampRatio(nightsBooked / availableNights),

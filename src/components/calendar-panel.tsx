@@ -126,8 +126,18 @@ function MonthCalendar({
                   {dayClosure ? (
                     <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-3 py-2">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-200">
+                        {dayClosure.statusLabel}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
                         {dayClosure.reason}
                       </p>
+                      {dayClosure.guestCount > 0 || dayClosure.nights > 0 ? (
+                        <p className="mt-1 text-xs text-rose-100/90">
+                          {dayClosure.guestCount > 0 ? `${formatNumber(dayClosure.guestCount)} guests` : null}
+                          {dayClosure.guestCount > 0 && dayClosure.nights > 0 ? " • " : null}
+                          {dayClosure.nights > 0 ? `${formatNumber(dayClosure.nights)} nights` : null}
+                        </p>
+                      ) : null}
                       {dayClosure.note ? (
                         <p className="mt-1 whitespace-pre-line text-xs text-rose-100/90">{dayClosure.note}</p>
                       ) : null}

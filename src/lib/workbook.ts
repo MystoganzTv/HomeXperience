@@ -324,7 +324,7 @@ function parseCalendarClosures(rows: SheetRow[]) {
     for (let columnIndex = 4; columnIndex <= 10; columnIndex += 1) {
       const rawValue = String(row[columnIndex] ?? "").trim();
 
-      if (!rawValue || !/closed/i.test(rawValue)) {
+      if (!rawValue || !/(closed|check-in|check-out)/i.test(rawValue)) {
         continue;
       }
 
@@ -361,17 +361,47 @@ function parseCalendarClosures(rows: SheetRow[]) {
       }
 
       const note = Array.from(noteLines).join("\n");
+      const guestLine = note
+        .split("\n")
+        .find((line) => /guests?\s*:/i.test(line));
+      const nightsLine = note
+        .split("\n")
+        .find((line) => /nights?\s*:/i.test(line));
+      const statusLine = note
+        .split("\n")
+        .find((line) => /^(check-in|check-out|closed|booked)\s*:?/i.test(line));
+      const parsedGuestCount = guestLine
+        ? parseCount(guestLine.replace(/guests?\s*:/i, ""))
+        : 0;
+      const parsedNights = nightsLine
+        ? parseCount(nightsLine.replace(/nights?\s*:/i, ""))
+        : 0;
+      const statusLabel =
+        statusLine
+          ?.split(":")[0]
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/\b\w/g, (match) => match.toUpperCase()) ?? "Closed";
       const reason =
         note
           .split("\n")
-          .map((line) => line.replace(/check-in:\s*/i, "").trim())
+          .map((line) =>
+            line
+              .replace(/check-in:\s*/i, "")
+              .replace(/check-out:\s*/i, "")
+              .replace(/closed:\s*/i, "")
+              .trim(),
+          )
           .find(
             (line) =>
               line &&
               !/closed/i.test(line) &&
+              !/check-in/i.test(line) &&
+              !/check-out/i.test(line) &&
+              !/booked/i.test(line) &&
               !/guests:/i.test(line) &&
               !/nights:/i.test(line),
-          ) || "Closed";
+          ) || statusLabel;
       const existing = closuresByDate.get(date);
 
       closuresByDate.set(date, {
@@ -380,6 +410,9 @@ function parseCalendarClosures(rows: SheetRow[]) {
         date,
         reason,
         note: existing?.note ? `${existing.note}\n${note}` : note,
+        statusLabel,
+        guestCount: Math.max(existing?.guestCount ?? 0, parsedGuestCount),
+        nights: Math.max(existing?.nights ?? 0, parsedNights),
         source: "upload",
       });
     }

@@ -220,7 +220,10 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       unit_name TEXT NOT NULL DEFAULT '',
       date TEXT NOT NULL,
       reason TEXT NOT NULL,
-      note TEXT NOT NULL
+      note TEXT NOT NULL,
+      status_label TEXT NOT NULL DEFAULT 'Closed',
+      guest_count INTEGER NOT NULL DEFAULT 0,
+      nights INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS user_settings (
@@ -348,6 +351,18 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE calendar_closures ADD COLUMN unit_name TEXT NOT NULL DEFAULT '';");
   }
 
+  if (!hasColumn(db, "calendar_closures", "status_label")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN status_label TEXT NOT NULL DEFAULT 'Closed';");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "guest_count")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN guest_count INTEGER NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "calendar_closures", "nights")) {
+    db.exec("ALTER TABLE calendar_closures ADD COLUMN nights INTEGER NOT NULL DEFAULT 0;");
+  }
+
   if (!hasColumn(db, "user_settings", "primary_country_code")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN primary_country_code TEXT NOT NULL DEFAULT 'US';");
   }
@@ -453,7 +468,10 @@ async function initializePostgresSchema() {
           unit_name TEXT NOT NULL DEFAULT '',
           date TEXT NOT NULL,
           reason TEXT NOT NULL,
-          note TEXT NOT NULL
+          note TEXT NOT NULL,
+          status_label TEXT NOT NULL DEFAULT 'Closed',
+          guest_count INTEGER NOT NULL DEFAULT 0,
+          nights INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS user_settings (
@@ -560,6 +578,18 @@ async function initializePostgresSchema() {
         ALTER TABLE calendar_closures
         ADD COLUMN IF NOT EXISTS unit_name TEXT NOT NULL DEFAULT ''
       `);
+      await pool.query(`
+        ALTER TABLE calendar_closures
+        ADD COLUMN IF NOT EXISTS status_label TEXT NOT NULL DEFAULT 'Closed'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_closures
+        ADD COLUMN IF NOT EXISTS guest_count INTEGER NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_closures
+        ADD COLUMN IF NOT EXISTS nights INTEGER NOT NULL DEFAULT 0
+      `);
     })();
   }
 
@@ -652,6 +682,10 @@ function mapCalendarClosureRecord(row: Record<string, unknown>): CalendarClosure
     date: String(getRowValue(row, "date")),
     reason: String(getRowValue(row, "reason")),
     note: String(getRowValue(row, "note")),
+    statusLabel:
+      String(getRowValue(row, "statusLabel", "statuslabel")) || "Closed",
+    guestCount: Number(getRowValue(row, "guestCount", "guestcount") ?? 0),
+    nights: Number(getRowValue(row, "nights") ?? 0),
   };
 }
 
@@ -729,6 +763,9 @@ function cloneCalendarClosureRecord(closure: StoredCalendarClosure): CalendarClo
     date: closure.date,
     reason: closure.reason,
     note: closure.note,
+    statusLabel: closure.statusLabel,
+    guestCount: closure.guestCount,
+    nights: closure.nights,
   };
 }
 
@@ -966,6 +1003,9 @@ function createClosureFingerprint(closure: CalendarClosureRecord) {
     closure.date,
     normalizeFingerprintValue(closure.reason),
     normalizeFingerprintValue(closure.note),
+    normalizeFingerprintValue(closure.statusLabel),
+    closure.guestCount,
+    closure.nights,
   ].join("|");
 }
 
@@ -1071,7 +1111,10 @@ export async function appendImportData({
             unit_name AS unitName,
             date,
             reason,
-            note
+            note,
+            status_label AS statusLabel,
+            guest_count AS guestCount,
+            nights
           FROM calendar_closures
           WHERE owner_email = $1 AND source = 'upload'
         `,
@@ -1204,9 +1247,9 @@ export async function appendImportData({
         await client.query(
           `
             INSERT INTO calendar_closures (
-              owner_email, import_id, source, property_name, unit_name, date, reason, note
+              owner_email, import_id, source, property_name, unit_name, date, reason, note, status_label, guest_count, nights
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           `,
           [
             normalizedEmail,
@@ -1217,6 +1260,9 @@ export async function appendImportData({
             closure.date,
             closure.reason,
             closure.note,
+            closure.statusLabel,
+            closure.guestCount,
+            closure.nights,
           ],
         );
       }
@@ -1399,7 +1445,10 @@ export async function appendImportData({
             unit_name AS unitName,
             date,
             reason,
-            note
+            note,
+            status_label AS statusLabel,
+            guest_count AS guestCount,
+            nights
           FROM calendar_closures
           WHERE owner_email = ? AND source = 'upload'
         `,
@@ -1477,9 +1526,9 @@ export async function appendImportData({
     `);
     const insertClosure = db.prepare(`
       INSERT INTO calendar_closures (
-        owner_email, import_id, source, property_name, unit_name, date, reason, note
+        owner_email, import_id, source, property_name, unit_name, date, reason, note, status_label, guest_count, nights
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const booking of freshBookings) {
@@ -1534,6 +1583,9 @@ export async function appendImportData({
         closure.date,
         closure.reason,
         closure.note,
+        closure.statusLabel,
+        closure.guestCount,
+        closure.nights,
       );
     }
 
@@ -2085,7 +2137,10 @@ export async function getCalendarClosures(ownerEmail: string): Promise<CalendarC
           unit_name AS unitName,
           date,
           reason,
-          note
+          note,
+          status_label AS statusLabel,
+          guest_count AS guestCount,
+          nights
         FROM calendar_closures
         WHERE owner_email = $1
         ORDER BY date ASC
@@ -2117,7 +2172,10 @@ export async function getCalendarClosures(ownerEmail: string): Promise<CalendarC
           unit_name AS unitName,
           date,
           reason,
-          note
+          note,
+          status_label AS statusLabel,
+          guest_count AS guestCount,
+          nights
         FROM calendar_closures
         WHERE owner_email = ?
         ORDER BY date ASC

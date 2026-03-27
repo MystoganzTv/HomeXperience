@@ -10,6 +10,7 @@ import {
   Percent,
   ReceiptText,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import type {
@@ -74,6 +75,12 @@ export function DashboardShell({
           icon: <CalendarDays className="h-5 w-5" />,
         },
         {
+          label: "Total Guests",
+          value: view.metrics.guestsCount,
+          format: "number" as const,
+          icon: <Users className="h-5 w-5" />,
+        },
+        {
           label: "Nights Booked",
           value: view.metrics.nightsBooked,
           format: "number" as const,
@@ -116,6 +123,12 @@ export function DashboardShell({
           value: view.metrics.bookingsCount,
           format: "number" as const,
           icon: <CalendarDays className="h-5 w-5" />,
+        },
+        {
+          label: "Total Guests",
+          value: view.metrics.guestsCount,
+          format: "number" as const,
+          icon: <Users className="h-5 w-5" />,
         },
         {
           label: "Nights Booked",
@@ -276,6 +289,14 @@ export function DashboardShell({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
                             {formatNumber(market.bookings)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            Guests
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                            {formatNumber(market.guests)}
                           </p>
                         </div>
                         <div>
