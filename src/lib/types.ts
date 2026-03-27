@@ -173,8 +173,11 @@ export type DashboardView = {
   };
   taxSettings: {
     countryCode: CountryCode;
+    savedCountryCode: CountryCode;
     taxRate: number;
     suggestedTaxRate: number;
+    usesSavedSettings: boolean;
+    usesCustomRate: boolean;
   };
   revenueByMonth: MonthlyPoint[];
   profitByMonth: MonthlyPoint[];

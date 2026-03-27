@@ -11,8 +11,8 @@ import {
   LayoutDashboard,
   LogOut,
   ReceiptText,
-  UserCircle2,
   FileText,
+  Settings2,
   Wallet,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
@@ -31,7 +31,7 @@ type ActivePage =
   | "reports"
   | "imports"
   | "properties"
-  | "profile";
+  | "settings";
 const sidebarStorageKey = "hostlyx:sidebar-collapsed";
 
 const navItems: Array<{
@@ -159,13 +159,13 @@ export function WorkspaceShell({
                     Properties
                   </Link>
                   <Link
-                    href="/profile"
+                    href="/settings"
                     className={`workspace-button-secondary inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold transition ${
-                      activePage === "profile" ? "workspace-sidebar-link-active" : ""
+                      activePage === "settings" ? "workspace-sidebar-link-active" : ""
                     }`}
                   >
-                    <UserCircle2 className="h-3.5 w-3.5" />
-                    Profile
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Settings
                   </Link>
                 </div>
 

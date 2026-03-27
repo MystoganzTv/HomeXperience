@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      message: `Saved tax estimation settings for ${taxCountryCode}.`,
+      message: `Saved tax defaults for ${taxCountryCode}.`,
     });
   } catch (error) {
     return NextResponse.json(

@@ -20,7 +20,7 @@ export function WorkspaceHeader({
   latestImport,
   actions,
 }: {
-  activePage: "dashboard" | "bookings" | "expenses" | "properties" | "profile";
+  activePage: "dashboard" | "bookings" | "expenses" | "properties" | "settings";
   businessName: string;
   userName: string;
   userEmail: string;
@@ -67,8 +67,8 @@ export function WorkspaceHeader({
               <Link href="/dashboard/properties" className={navClassName(activePage === "properties")}>
                 Properties
               </Link>
-              <Link href="/profile" className={navClassName(activePage === "profile")}>
-                Profile
+              <Link href="/settings" className={navClassName(activePage === "settings")}>
+                Settings
               </Link>
             </nav>
           </div>

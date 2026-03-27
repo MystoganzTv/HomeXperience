@@ -328,14 +328,17 @@ export function DashboardShell({
           )}
 
           <TaxEstimationCard
-            key={`${view.taxSettings.countryCode}-${view.taxSettings.taxRate}`}
-            initialCountryCode={view.taxSettings.countryCode}
-            initialTaxRate={view.taxSettings.taxRate}
-            netProfit={view.metrics.netProfit}
+            key={`${view.taxSettings.countryCode}-${view.taxSettings.taxRate}-${view.taxSettings.savedCountryCode}`}
+            countryCode={view.taxSettings.countryCode}
+            savedCountryCode={view.taxSettings.savedCountryCode}
+            taxRate={view.taxSettings.taxRate}
+            suggestedTaxRate={view.taxSettings.suggestedTaxRate}
             estimatedTaxes={view.metrics.estimatedTaxes}
             profitAfterTax={view.metrics.profitAfterTax}
             currencyCode={currencyCode}
             mixedCurrencyMode={view.mixedCurrencyMode}
+            usesSavedSettings={view.taxSettings.usesSavedSettings}
+            usesCustomRate={view.taxSettings.usesCustomRate}
           />
 
           <ChartsPanel

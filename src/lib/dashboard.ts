@@ -17,7 +17,7 @@ import {
   calculateTotals,
 } from "./finance";
 import { getCurrencyForCountry, normalizeCountryCode } from "./markets";
-import { getDefaultTaxRateByCountry } from "./tax";
+import { getAppliedTaxSettings } from "./tax";
 import type {
   BookingRecord,
   CategoryPoint,
@@ -410,10 +410,15 @@ export function buildDashboardView({
     end: monthlyRange.end,
   }).map((month) => format(month, "yyyy-MM"));
   const useYearInLabel = new Set(monthKeys.map((key) => key.slice(0, 4))).size > 1;
+  const appliedTaxSettings = getAppliedTaxSettings({
+    selectedCountryCode: filters.countryCode,
+    savedCountryCode: normalizedTaxCountryCode,
+    savedTaxRate: taxRate,
+  });
   const totals = calculateTotals(
     filteredBookings,
     filteredExpenses,
-    taxRate,
+    appliedTaxSettings.taxRate,
   );
   const monthlyData = calculateMonthlyData(filteredBookings, filteredExpenses, {
     monthKeys,
@@ -541,9 +546,12 @@ export function buildDashboardView({
       profitAfterTax: totals.profitAfterTax,
     },
     taxSettings: {
-      countryCode: normalizedTaxCountryCode,
-      taxRate,
-      suggestedTaxRate: getDefaultTaxRateByCountry(normalizedTaxCountryCode),
+      countryCode: appliedTaxSettings.countryCode,
+      savedCountryCode: appliedTaxSettings.savedCountryCode,
+      taxRate: appliedTaxSettings.taxRate,
+      suggestedTaxRate: appliedTaxSettings.suggestedTaxRate,
+      usesSavedSettings: appliedTaxSettings.usesSavedSettings,
+      usesCustomRate: appliedTaxSettings.usesCustomRate,
     },
     revenueByMonth: monthlyData.revenueByMonth,
     profitByMonth: monthlyData.profitByMonth,

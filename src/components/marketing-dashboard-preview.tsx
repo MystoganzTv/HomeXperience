@@ -25,7 +25,7 @@ export function MarketingDashboardPreview({
 }: MarketingDashboardPreviewProps) {
   const sidebarItems =
     variant === "value"
-      ? ["Dashboard", "Performance", "Reports", "Imports", "Profile"]
+      ? ["Dashboard", "Performance", "Reports", "Imports", "Settings"]
       : ["Dashboard", "Bookings", "Expenses", "Performance", "Reports"];
 
   const topBadge =

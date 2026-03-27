@@ -40,3 +40,34 @@ export function calculateProfitAfterTax(netProfit: number, taxRate: number) {
 
   return netProfit - calculateEstimatedTaxes(netProfit, taxRate);
 }
+
+export function getAppliedTaxSettings({
+  selectedCountryCode,
+  savedCountryCode,
+  savedTaxRate,
+}: {
+  selectedCountryCode: CountryCode | "all";
+  savedCountryCode: CountryCode;
+  savedTaxRate: number;
+}) {
+  const normalizedSavedCountryCode = savedCountryCode;
+  const normalizedSavedTaxRate = normalizeTaxRate(savedTaxRate);
+  const savedDefaultTaxRate = getDefaultTaxRateByCountry(normalizedSavedCountryCode);
+  const usesCustomSavedRate = normalizedSavedTaxRate !== savedDefaultTaxRate;
+  const effectiveCountryCode =
+    selectedCountryCode === "all" ? normalizedSavedCountryCode : selectedCountryCode;
+  const suggestedTaxRate = getDefaultTaxRateByCountry(effectiveCountryCode);
+  const usesSavedSettings =
+    selectedCountryCode === "all" ||
+    (effectiveCountryCode === normalizedSavedCountryCode && usesCustomSavedRate);
+  const effectiveTaxRate = usesSavedSettings ? normalizedSavedTaxRate : suggestedTaxRate;
+
+  return {
+    countryCode: effectiveCountryCode,
+    savedCountryCode: normalizedSavedCountryCode,
+    taxRate: effectiveTaxRate,
+    suggestedTaxRate,
+    usesSavedSettings,
+    usesCustomRate: usesSavedSettings && effectiveTaxRate !== suggestedTaxRate,
+  };
+}
