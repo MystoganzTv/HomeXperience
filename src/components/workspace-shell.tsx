@@ -95,59 +95,55 @@ export function WorkspaceShell({
     <main className="min-h-screen bg-[var(--workspace-bg)] px-4 py-4 sm:px-6 xl:px-8">
       <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 xl:flex-row xl:items-start">
         <aside
-          className={`flex w-full flex-col gap-6 overflow-hidden rounded-[30px] border border-[var(--workspace-sidebar-border)] bg-[var(--workspace-sidebar)] shadow-[0_20px_40px_rgba(15,23,42,0.16)] xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)] xl:shrink-0 xl:self-start ${isCollapsed ? "p-4 xl:w-[104px]" : "p-5 xl:w-[272px]"}`}
+          className={`w-full rounded-[30px] border border-[var(--workspace-sidebar-border)] bg-[var(--workspace-sidebar)] shadow-[0_20px_40px_rgba(15,23,42,0.16)] xl:sticky xl:top-4 xl:shrink-0 xl:self-start ${isCollapsed ? "p-4 xl:w-[104px]" : "p-5 xl:w-[272px]"}`}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="border-b border-white/8 pb-5">
-              <div
-                className={`flex ${isCollapsed ? "flex-col items-center justify-center" : "items-center justify-between"} gap-3`}
+          <div className="border-b border-white/8 pb-5">
+            <div
+              className={`flex ${isCollapsed ? "flex-col items-center justify-center" : "items-center justify-between"} gap-3`}
+            >
+              <BrandLogo href="/dashboard" compact hideWordmark={isCollapsed} />
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="hidden xl:inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] p-2.5 text-white transition hover:bg-white/[0.08]"
+                title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <BrandLogo href="/dashboard" compact hideWordmark={isCollapsed} />
-                <button
-                  type="button"
-                  onClick={toggleSidebar}
-                  aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  className="hidden xl:inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] p-2.5 text-white transition hover:bg-white/[0.08]"
-                  title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                >
-                  {isCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-                </button>
+                {isCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+              </button>
+            </div>
+            {!isCollapsed ? (
+              <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                <p className="text-sm font-medium text-white">{businessName}</p>
+                <p className="mt-1 text-xs text-[var(--workspace-sidebar-muted)]">
+                  {currencyCode} workspace
+                </p>
               </div>
-              {!isCollapsed ? (
-                <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                  <p className="text-sm font-medium text-white">{businessName}</p>
-                  <p className="mt-1 text-xs text-[var(--workspace-sidebar-muted)]">
-                    {currencyCode} workspace
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-1">
-              <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.id}
-                      href={item.href}
-                      className={`${navClassName(activePage === item.id)} ${isCollapsed ? "justify-center px-3" : ""}`}
-                      title={item.label}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {!isCollapsed ? <span className="min-w-0 truncate">{item.label}</span> : null}
-                      {activePage === item.id && !isCollapsed ? (
-                        <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--workspace-accent)]" />
-                      ) : null}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
+            ) : null}
           </div>
 
-          <div className={`border-t border-white/8 ${isCollapsed ? "pt-4" : "space-y-4 pt-6"}`}>
+          <nav className={`mt-6 grid gap-2 ${isCollapsed ? "xl:grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-1"}`}>
+            {navItems.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`${navClassName(activePage === item.id)} ${isCollapsed ? "justify-center px-3" : ""}`}
+                  title={item.label}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {!isCollapsed ? <span className="min-w-0 truncate">{item.label}</span> : null}
+                  {activePage === item.id && !isCollapsed ? (
+                    <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--workspace-accent)]" />
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className={`mt-10 border-t border-white/8 ${isCollapsed ? "pt-4" : "space-y-4 pt-8"}`}>
             {!isCollapsed ? (
               <>
                 <div className="flex flex-wrap gap-2">
