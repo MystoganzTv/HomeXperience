@@ -36,6 +36,7 @@ export function FilterBar({
   selectedMonth,
   selectedChannel,
   selectedCountryCode,
+  showMonthSelect = true,
 }: {
   years: number[];
   channels: string[];
@@ -44,6 +45,7 @@ export function FilterBar({
   selectedMonth: number | "all";
   selectedChannel: string | "all";
   selectedCountryCode: CountryCode | "all";
+  showMonthSelect?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -171,17 +173,19 @@ export function FilterBar({
           </option>
         ))}
       </select>
-      <select
-        className={`${selectClassName()} min-w-[170px]`}
-        value={String(selectedMonth)}
-        onChange={(event) => updateFilter("month", event.target.value)}
-      >
-        {monthOptions.map((month) => (
-          <option key={month.value} value={month.value}>
-            {month.label}
-          </option>
-        ))}
-      </select>
+      {showMonthSelect ? (
+        <select
+          className={`${selectClassName()} min-w-[170px]`}
+          value={String(selectedMonth)}
+          onChange={(event) => updateFilter("month", event.target.value)}
+        >
+          {monthOptions.map((month) => (
+            <option key={month.value} value={month.value}>
+              {month.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <select
         className={`${selectClassName()} min-w-[170px]`}
         value={selectedChannel}

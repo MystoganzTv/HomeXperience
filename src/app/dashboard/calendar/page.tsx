@@ -1,4 +1,9 @@
-import { format, parseISO } from "date-fns";
+import {
+  eachMonthOfInterval,
+  format,
+  parseISO,
+  startOfMonth,
+} from "date-fns";
 import { redirect } from "next/navigation";
 import { CalendarPanel } from "@/components/calendar-panel";
 import { FilterBar } from "@/components/filter-bar";
@@ -18,16 +23,48 @@ export const runtime = "nodejs";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-function matchesCalendarFilter(
-  dateValue: string,
+function getCalendarMonthAnchors(
+  bookings: Awaited<ReturnType<typeof getBookings>>,
+  closures: Awaited<ReturnType<typeof getCalendarClosures>>,
   year: number | "all",
   month: number | "all",
 ) {
-  const date = parseISO(dateValue);
-  const matchesYear = year === "all" || date.getFullYear() === year;
-  const matchesMonth = month === "all" || date.getMonth() + 1 === month;
+  const allDates = [
+    ...bookings.map((booking) => parseISO(booking.checkIn)),
+    ...bookings.map((booking) => parseISO(booking.checkout)),
+    ...closures.map((closure) => parseISO(closure.date)),
+  ].filter((date) => !Number.isNaN(date.getTime()));
 
-  return matchesYear && matchesMonth;
+  if (year !== "all" && month !== "all") {
+    return [new Date(year, month - 1, 1)];
+  }
+
+  if (year !== "all") {
+    return Array.from({ length: 12 }, (_, index) => new Date(year, index, 1));
+  }
+
+  const availableYears = Array.from(
+    new Set(allDates.map((date) => date.getFullYear())),
+  ).sort((left, right) => left - right);
+
+  if (month !== "all") {
+    if (availableYears.length === 0) {
+      return [new Date(new Date().getFullYear(), month - 1, 1)];
+    }
+
+    return availableYears.map((availableYear) => new Date(availableYear, month - 1, 1));
+  }
+
+  if (allDates.length === 0) {
+    return [startOfMonth(new Date())];
+  }
+
+  const sortedDates = allDates.sort((left, right) => left.getTime() - right.getTime());
+
+  return eachMonthOfInterval({
+    start: startOfMonth(sortedDates[0]),
+    end: startOfMonth(sortedDates.at(-1) ?? new Date()),
+  });
 }
 
 export default async function CalendarPage({
@@ -57,41 +94,51 @@ export default async function CalendarPage({
     searchParams,
   ]);
 
-  const baseFilters = getDashboardFilters(
+  const filters = getDashboardFilters(
     resolvedSearchParams,
     bookings,
     [],
     properties,
     userSettings.primaryCountryCode,
   );
-  const filters = baseFilters;
   const propertyCountryMap = new Map(
     properties.map((property) => [property.name.trim().toLowerCase(), property.countryCode]),
   );
-  const filteredBookings = bookings.filter((booking) => {
+
+  const countryAndChannelBookings = bookings.filter((booking) => {
     const countryCode =
       propertyCountryMap.get(booking.propertyName.trim().toLowerCase()) ??
       userSettings.primaryCountryCode;
+
     return (
-      countryCode === filters.countryCode || filters.countryCode === "all"
-    ) && matchesCalendarFilter(booking.checkIn, filters.year, filters.month) &&
-      (filters.channel === "all" || booking.channel === filters.channel);
+      (filters.countryCode === "all" || countryCode === filters.countryCode) &&
+      (filters.channel === "all" || booking.channel === filters.channel)
+    );
   });
-  const filteredClosures = closures.filter((closure) => {
+
+  const countryClosures = closures.filter((closure) => {
     const countryCode =
       propertyCountryMap.get(closure.propertyName.trim().toLowerCase()) ??
       userSettings.primaryCountryCode;
-    return (
-      countryCode === filters.countryCode || filters.countryCode === "all"
-    ) && matchesCalendarFilter(closure.date, filters.year, filters.month);
+
+    return filters.countryCode === "all" || countryCode === filters.countryCode;
   });
+
+  const monthAnchors = getCalendarMonthAnchors(
+    countryAndChannelBookings,
+    countryClosures,
+    filters.year,
+    filters.month,
+  );
 
   const displayCountryCode =
     filters.countryCode === "all" ? userSettings.primaryCountryCode : filters.countryCode;
   const currencyCode = getCurrencyForCountry(displayCountryCode);
   const rangeLabel =
     filters.year === "all"
-      ? "All imported months"
+      ? filters.month === "all"
+        ? "All imported months"
+        : `Every ${format(new Date(2000, filters.month - 1, 1), "MMMM")}`
       : filters.month === "all"
         ? String(filters.year)
         : format(new Date(filters.year, filters.month - 1, 1), "MMMM yyyy");
@@ -100,7 +147,7 @@ export default async function CalendarPage({
     <WorkspaceShell
       activePage="calendar"
       pageTitle="Calendar"
-      pageSubtitle="See bookings, check-ins, check-outs, and imported closed days in one place."
+      pageSubtitle="See bookings, check-ins, check-outs, and closed days laid out month by month."
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -127,10 +174,9 @@ export default async function CalendarPage({
     >
       <CalendarPanel
         rangeLabel={rangeLabel}
-        bookings={filteredBookings}
-        closures={filteredClosures}
-        selectedYear={filters.year}
-        selectedMonth={filters.month}
+        bookings={countryAndChannelBookings}
+        closures={countryClosures}
+        monthAnchors={monthAnchors}
       />
     </WorkspaceShell>
   );

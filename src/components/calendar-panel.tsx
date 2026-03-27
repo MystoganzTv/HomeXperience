@@ -1,5 +1,4 @@
 import {
-  eachMonthOfInterval,
   eachDayOfInterval,
   endOfMonth,
   format,
@@ -144,37 +143,6 @@ function MonthCalendar({
   );
 }
 
-function getMonthAnchors(
-  bookings: BookingRecord[],
-  closures: CalendarClosureRecord[],
-  selectedYear: number | "all",
-  selectedMonth: number | "all",
-) {
-  if (selectedYear !== "all" && selectedMonth !== "all") {
-    return [new Date(selectedYear, selectedMonth - 1, 1)];
-  }
-
-  if (selectedYear !== "all") {
-    return Array.from({ length: 12 }, (_, index) => new Date(selectedYear, index, 1));
-  }
-
-  const allDates = [
-    ...bookings.map((booking) => parseISO(booking.checkIn)),
-    ...closures.map((closure) => parseISO(closure.date)),
-  ].filter((date) => !Number.isNaN(date.getTime()));
-
-  if (allDates.length === 0) {
-    return [startOfMonth(new Date())];
-  }
-
-  const sortedDates = allDates.sort((left, right) => left.getTime() - right.getTime());
-
-  return eachMonthOfInterval({
-    start: startOfMonth(sortedDates[0]),
-    end: startOfMonth(sortedDates.at(-1) ?? new Date()),
-  });
-}
-
 function intersectsMonth(booking: BookingRecord, anchorDate: Date) {
   const monthStart = startOfMonth(anchorDate);
   const monthEnd = endOfMonth(anchorDate);
@@ -188,17 +156,13 @@ export function CalendarPanel({
   rangeLabel,
   bookings,
   closures,
-  selectedYear,
-  selectedMonth,
+  monthAnchors,
 }: {
   rangeLabel: string;
   bookings: BookingRecord[];
   closures: CalendarClosureRecord[];
-  selectedYear: number | "all";
-  selectedMonth: number | "all";
+  monthAnchors: Date[];
 }) {
-  const monthAnchors = getMonthAnchors(bookings, closures, selectedYear, selectedMonth);
-
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-4">

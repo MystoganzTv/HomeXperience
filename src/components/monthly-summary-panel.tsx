@@ -16,9 +16,11 @@ function findTopMonth(months: MonthlyPoint[]) {
 export function MonthlySummaryPanel({
   view,
   currencyCode,
+  rangeLabel,
 }: {
   view: DashboardView;
   currencyCode: CurrencyCode;
+  rangeLabel: string;
 }) {
   const monthsInView = view.monthlySummary.length;
   const topMonth = findTopMonth(view.monthlySummary);
@@ -70,6 +72,33 @@ export function MonthlySummaryPanel({
 
   return (
     <div className="space-y-6">
+      <SectionCard
+        title="How This View Works"
+        subtitle="This page compares months against each other instead of zooming into one single month."
+      >
+        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="workspace-soft-card rounded-[22px] p-5">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+              Reporting window
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--workspace-text)]">
+              {rangeLabel}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+              Hostlyx groups your saved bookings and expenses month by month so you can compare seasonality, pace, and profitability.
+            </p>
+          </div>
+          <div className="workspace-soft-card rounded-[22px] p-5">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+              Reading tip
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+              Revenue and payout are grouped by booking check-in month. Expenses stay in their own expense month. Use this page to compare months, then use Dashboard or Calendar when you want a closer operational view.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
       <div className={`grid gap-4 ${view.mixedCurrencyMode ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4"}`}>
         {cards.map((card) => (
           <MetricCard

@@ -50,19 +50,25 @@ export default async function MonthlyPage({
     properties,
     userSettings.primaryCountryCode,
   );
+  const monthlyFilters = {
+    ...filters,
+    month: "all" as const,
+  };
   const view = buildDashboardView({
     bookings,
     expenses,
-    filters,
+    filters: monthlyFilters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
   });
+  const rangeLabel =
+    monthlyFilters.year === "all" ? "All imported months" : String(monthlyFilters.year);
 
   return (
     <WorkspaceShell
       activePage="monthly"
-      pageTitle="Monthly"
-      pageSubtitle="See your business month by month with the current filter window."
+      pageTitle="Monthly Performance"
+      pageSubtitle="Compare month-by-month results across the selected reporting window."
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -74,13 +80,18 @@ export default async function MonthlyPage({
           channels={view.availableChannels}
           countries={view.availableCountries}
           selectedYear={view.filters.year}
-          selectedMonth={view.filters.month}
+          selectedMonth="all"
           selectedChannel={view.filters.channel}
           selectedCountryCode={view.filters.countryCode}
+          showMonthSelect={false}
         />
       }
     >
-      <MonthlySummaryPanel view={view} currencyCode={view.displayCurrencyCode} />
+      <MonthlySummaryPanel
+        view={view}
+        currencyCode={view.displayCurrencyCode}
+        rangeLabel={rangeLabel}
+      />
     </WorkspaceShell>
   );
 }
