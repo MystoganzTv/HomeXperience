@@ -21,6 +21,7 @@ import type { PropertyDefinition } from "@/lib/types";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 type FileStatus = "checking" | "ready" | "duplicate-existing" | "duplicate-selection" | "error";
+type ToastTone = "success" | "error" | "info";
 type DuplicateMatch = {
   workbookHash: string;
   fileName: string;
@@ -31,6 +32,10 @@ type SelectedFileMeta = {
   status: FileStatus;
   hash?: string;
   duplicateMatch?: DuplicateMatch;
+};
+type UploadToast = {
+  tone: ToastTone;
+  message: string;
 };
 
 function inputClassName() {
@@ -104,8 +109,22 @@ export function UploadPanel({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [uploadState, setUploadState] = useState<UploadState>("idle");
-  const [message, setMessage] = useState<string | null>(null);
   const [selectedFileMeta, setSelectedFileMeta] = useState<Record<string, SelectedFileMeta>>({});
+  const [toast, setToast] = useState<UploadToast | null>(null);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setToast(null);
+    }, 4800);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [toast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,14 +179,11 @@ export function UploadPanel({
         );
         const seenHashes = new Set<string>();
         const nextMeta: Record<string, SelectedFileMeta> = {};
-        let duplicateExistingCount = 0;
-        let duplicateSelectionCount = 0;
 
         for (const entry of hashedFiles) {
           const existingMatch = matchesByHash.get(entry.hash);
 
           if (existingMatch) {
-            duplicateExistingCount += 1;
             nextMeta[entry.key] = {
               status: "duplicate-existing",
               hash: entry.hash,
@@ -177,7 +193,6 @@ export function UploadPanel({
           }
 
           if (seenHashes.has(entry.hash)) {
-            duplicateSelectionCount += 1;
             nextMeta[entry.key] = {
               status: "duplicate-selection",
               hash: entry.hash,
@@ -194,19 +209,6 @@ export function UploadPanel({
 
         setSelectedFileMeta(nextMeta);
 
-        if (uploadState === "idle") {
-          if (duplicateExistingCount > 0 || duplicateSelectionCount > 0) {
-            setMessage(
-              `${seenHashes.size} workbook${seenHashes.size === 1 ? "" : "s"} ready. ${duplicateExistingCount} already imported and ${duplicateSelectionCount} duplicated inside this selection.`,
-            );
-          } else {
-            setMessage(
-              seenHashes.size === 1
-                ? `${selectedFiles[0]?.name ?? "1 workbook"} selected and ready to import.`
-                : `${seenHashes.size} workbooks selected and ready to import.`,
-            );
-          }
-        }
       } catch {
         if (cancelled) {
           return;
@@ -219,11 +221,6 @@ export function UploadPanel({
           ]),
         );
         setSelectedFileMeta(nextMeta);
-        if (uploadState === "idle") {
-          setMessage(
-            "Selected files were added, but Hostlyx could not verify duplicates right now.",
-          );
-        }
       }
     }
 
@@ -232,7 +229,7 @@ export function UploadPanel({
     return () => {
       cancelled = true;
     };
-  }, [selectedFiles, uploadState]);
+  }, [selectedFiles]);
 
   const selectionSummary = useMemo(() => {
     let readyCount = 0;
@@ -279,36 +276,43 @@ export function UploadPanel({
 
     if (selectedFiles.length === 0) {
       setUploadState("error");
-      setMessage("Choose at least one .xlsx workbook before importing.");
+      setToast({
+        tone: "error",
+        message: "Choose at least one .xlsx workbook before importing.",
+      });
       return;
     }
 
     if (selectionSummary.checkingCount > 0) {
       setUploadState("error");
-      setMessage("Hostlyx is still checking the selected files for duplicate content.");
+      setToast({
+        tone: "info",
+        message: "Hostlyx is still checking the selected files for duplicate content.",
+      });
       return;
     }
 
     if (importableFiles.length === 0) {
       setUploadState("error");
-      setMessage(
-        "Every selected workbook is already imported or duplicated in this selection. Remove the repeated files or choose different workbooks.",
-      );
+      setToast({
+        tone: "error",
+        message:
+          "Every selected workbook is already imported or duplicated in this selection. Remove the repeated files or choose different workbooks.",
+      });
       return;
     }
 
     if (!selectedPropertyName) {
       setUploadState("error");
-      setMessage("Choose the property that this workbook belongs to.");
+      setToast({
+        tone: "error",
+        message: "Choose the property that this workbook belongs to.",
+      });
       return;
     }
 
     setUploadState("uploading");
-    setMessage(
-      importableFiles.length === 1
-        ? `Uploading ${importableFiles[0].name} into ${selectedPropertyName}...`
-        : `Uploading ${importableFiles.length} workbooks into ${selectedPropertyName}...`,
-    );
+    setToast(null);
 
     try {
       const upload = new FormData();
@@ -329,23 +333,34 @@ export function UploadPanel({
 
       if (!response.ok) {
         setUploadState("error");
-        setMessage(
-          payload.error ?? "Import failed. Check the workbook format and try again.",
-        );
+        setToast({
+          tone: "error",
+          message: payload.error ?? "Import failed. Check the workbook format and try again.",
+        });
         return;
       }
 
       setUploadState("success");
-      setMessage(
-        payload.message ??
+      setToast({
+        tone: "success",
+        message:
+          payload.message ??
           (importableFiles.length === 1
             ? `${importableFiles[0].name} imported successfully.`
             : `${importableFiles.length} workbooks imported successfully.`),
-      );
+      });
+      setSelectedFiles([]);
+      setSelectedFileMeta({});
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
       router.refresh();
     } catch {
       setUploadState("error");
-      setMessage("Import failed. Check the workbook format and try again.");
+      setToast({
+        tone: "error",
+        message: "Import failed. Check the workbook format and try again.",
+      });
     }
   }
 
@@ -359,16 +374,10 @@ export function UploadPanel({
 
     if (nextFiles.length === 0) {
       setUploadState("idle");
-      setMessage(null);
       return;
     }
 
     setUploadState("idle");
-    setMessage(
-      nextFiles.length === 1
-        ? `${nextFiles[0].name} selected. Hostlyx is checking it for duplicate content...`
-        : `${nextFiles.length} workbooks selected. Hostlyx is checking them for duplicate content...`,
-    );
   }
 
   function removeSelectedFile(fileToRemove: File) {
@@ -388,34 +397,62 @@ export function UploadPanel({
       return nextMeta;
     });
     setUploadState("idle");
-    setMessage(
-      nextFiles.length === 0
-        ? "All selected workbooks were removed."
-        : nextFiles.length === 1
-          ? `${nextFiles[0].name} still selected and ready to import.`
-          : `${nextFiles.length} workbooks selected and ready to import.`,
-    );
   }
 
   function clearSelectedFiles() {
     setSelectedFiles([]);
     setSelectedFileMeta({});
     setUploadState("idle");
-    setMessage("Selection cleared. Choose one or more .xlsx workbooks to import.");
     if (inputRef.current) {
       inputRef.current.value = "";
     }
   }
 
-  const statusTone =
-    uploadState === "success"
-      ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-200"
-      : uploadState === "error"
-        ? "border-rose-400/24 bg-rose-400/10 text-rose-200"
-        : "border-[var(--workspace-border)] bg-[var(--workspace-panel-soft)] text-[var(--workspace-muted)]";
-
   return (
-    <div className="workspace-card rounded-[30px] p-5 sm:p-6">
+    <div className="relative">
+      {toast ? (
+        <div className="pointer-events-none fixed right-4 top-4 z-[70] w-full max-w-md sm:right-6 sm:top-6">
+          <div
+            className={`pointer-events-auto rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.32)] ${
+              toast.tone === "success"
+                ? "border-emerald-400/24 bg-[rgba(7,28,26,0.96)] text-emerald-100"
+                : toast.tone === "error"
+                  ? "border-rose-400/24 bg-[rgba(40,12,18,0.96)] text-rose-100"
+                  : "border-[var(--workspace-border)] bg-[rgba(15,23,42,0.96)] text-[var(--workspace-text)]"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {toast.tone === "success" ? (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+              ) : toast.tone === "error" ? (
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+              ) : (
+                <UploadCloud className="mt-0.5 h-5 w-5 shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">
+                  {toast.tone === "success"
+                    ? "Import completed"
+                    : toast.tone === "error"
+                      ? "Import needs attention"
+                      : "Import update"}
+                </p>
+                <p className="mt-1 text-sm leading-6 opacity-90">{toast.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="rounded-full border border-white/10 p-2 transition hover:bg-white/5"
+                aria-label="Dismiss import notification"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="workspace-card rounded-[30px] p-5 sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--workspace-muted)]">
@@ -624,23 +661,6 @@ export function UploadPanel({
           )}
         </button>
       </form>
-
-      <div className={`mt-4 rounded-[20px] border p-4 text-sm ${statusTone}`}>
-        <div className="flex items-start gap-3">
-          {uploadState === "success" ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : uploadState === "uploading" ? (
-            <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
-          ) : selectionSummary.duplicateExistingCount > 0 || selectionSummary.duplicateSelectionCount > 0 ? (
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <UploadCloud className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-          <p>
-            {message ??
-              "Pick one or more workbooks first. After import, Hostlyx will confirm the result and keep the batch in Import History while the records stay editable inside the app."}
-          </p>
-        </div>
       </div>
     </div>
   );
