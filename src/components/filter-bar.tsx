@@ -34,6 +34,7 @@ export function FilterBar({
   selectedChannel,
   selectedCountryCode,
   showMonthSelect = true,
+  showChannelSelect = true,
 }: {
   years: number[];
   channels: string[];
@@ -43,6 +44,7 @@ export function FilterBar({
   selectedChannel: string | "all";
   selectedCountryCode: CountryCode | "all";
   showMonthSelect?: boolean;
+  showChannelSelect?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -177,16 +179,18 @@ export function FilterBar({
           options={monthOptions}
         />
       ) : null}
-      <WorkspaceSelect
-        compact
-        className="min-w-[170px]"
-        value={selectedChannel}
-        onChange={(value) => updateFilter("channel", value)}
-        options={[
-          { value: "all", label: "All Channels" },
-          ...channels.map((channel) => ({ value: channel, label: channel })),
-        ]}
-      />
+      {showChannelSelect ? (
+        <WorkspaceSelect
+          compact
+          className="min-w-[170px]"
+          value={selectedChannel}
+          onChange={(value) => updateFilter("channel", value)}
+          options={[
+            { value: "all", label: "All Channels" },
+            ...channels.map((channel) => ({ value: channel, label: channel })),
+          ]}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,10 +1,17 @@
 import { redirect } from "next/navigation";
 import { ReceiptText, Wallet } from "lucide-react";
 import { ExpensesManager } from "@/components/expenses-manager";
+import { FilterBar } from "@/components/filter-bar";
 import { SectionCard } from "@/components/section-card";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
 import {
+  buildDashboardView,
+  filterExpensesForFilters,
+  getDashboardFilters,
+} from "@/lib/dashboard";
+import {
+  getBookings,
   getExpenses,
   getLatestImport,
   getPropertyDefinitions,
@@ -14,7 +21,13 @@ import { formatCurrency, formatNumber } from "@/lib/format";
 
 export const runtime = "nodejs";
 
-export default async function ExpensesPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function ExpensesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await getAuthSession();
   const ownerEmail = session?.user?.email?.toLowerCase();
 
@@ -29,13 +42,35 @@ export default async function ExpensesPage() {
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [expenses, latestImport, userSettings] = await Promise.all([
+  const [bookings, expenses, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
+    getBookings(ownerEmail),
     getExpenses(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
+    searchParams,
   ]);
+  const filters = getDashboardFilters(
+    resolvedSearchParams,
+    bookings,
+    expenses,
+    properties,
+    userSettings.primaryCountryCode,
+  );
+  const view = buildDashboardView({
+    bookings,
+    expenses,
+    filters,
+    properties,
+    fallbackCountryCode: userSettings.primaryCountryCode,
+  });
+  const filteredExpenses = filterExpensesForFilters({
+    expenses,
+    filters,
+    properties,
+    fallbackCountryCode: userSettings.primaryCountryCode,
+  });
 
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   return (
     <WorkspaceShell
@@ -45,18 +80,31 @@ export default async function ExpensesPage() {
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
-      currencyCode={userSettings.currencyCode}
+      currencyCode={view.displayCurrencyCode}
       latestImport={latestImport}
     >
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <FilterBar
+            years={view.availableYears}
+            channels={view.availableChannels}
+            countries={view.availableCountries}
+            selectedYear={view.filters.year}
+            selectedMonth={view.filters.month}
+            selectedChannel={view.filters.channel}
+            selectedCountryCode={view.filters.countryCode}
+            showChannelSelect={false}
+          />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
-          <SectionCard title="Total expenses">
+          <SectionCard title="Expenses in view">
             <div className="flex items-center gap-3">
               <div className="workspace-icon-chip rounded-2xl p-3">
                 <Wallet className="h-5 w-5" />
               </div>
               <p className="text-2xl font-semibold text-[var(--workspace-text)]">
-                {formatCurrency(totalExpenses, false, userSettings.currencyCode)}
+                {formatCurrency(totalExpenses, false, view.displayCurrencyCode)}
               </p>
             </div>
           </SectionCard>
@@ -66,7 +114,7 @@ export default async function ExpensesPage() {
                 <ReceiptText className="h-5 w-5" />
               </div>
               <p className="text-2xl font-semibold text-[var(--workspace-text)]">
-                {formatNumber(expenses.length)}
+                {formatNumber(filteredExpenses.length)}
               </p>
             </div>
           </SectionCard>
@@ -79,11 +127,11 @@ export default async function ExpensesPage() {
 
         <SectionCard
           title="All Expenses"
-          subtitle="Every expense saved in this business account, including imports and manual entries."
+          subtitle="Use the filters above to focus by market, year, and month."
         >
           <ExpensesManager
-            expenses={expenses}
-            currencyCode={userSettings.currencyCode}
+            expenses={filteredExpenses}
+            currencyCode={view.displayCurrencyCode}
             properties={properties}
           />
         </SectionCard>

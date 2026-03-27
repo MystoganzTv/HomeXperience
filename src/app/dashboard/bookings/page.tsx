@@ -1,11 +1,18 @@
 import { redirect } from "next/navigation";
 import { BookOpenText, Home } from "lucide-react";
 import { BookingsManager } from "@/components/bookings-manager";
+import { FilterBar } from "@/components/filter-bar";
 import { SectionCard } from "@/components/section-card";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
 import {
+  buildDashboardView,
+  filterBookingsForFilters,
+  getDashboardFilters,
+} from "@/lib/dashboard";
+import {
   getBookings,
+  getExpenses,
   getLatestImport,
   getPropertyDefinitions,
   getUserSettings,
@@ -14,7 +21,13 @@ import { formatNumber } from "@/lib/format";
 
 export const runtime = "nodejs";
 
-export default async function BookingsPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function BookingsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await getAuthSession();
   const ownerEmail = session?.user?.email?.toLowerCase();
 
@@ -29,13 +42,35 @@ export default async function BookingsPage() {
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, latestImport, userSettings] = await Promise.all([
+  const [bookings, expenses, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
     getBookings(ownerEmail),
+    getExpenses(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
+    searchParams,
   ]);
+  const filters = getDashboardFilters(
+    resolvedSearchParams,
+    bookings,
+    expenses,
+    properties,
+    userSettings.primaryCountryCode,
+  );
+  const view = buildDashboardView({
+    bookings,
+    expenses,
+    filters,
+    properties,
+    fallbackCountryCode: userSettings.primaryCountryCode,
+  });
+  const filteredBookings = filterBookingsForFilters({
+    bookings,
+    filters,
+    properties,
+    fallbackCountryCode: userSettings.primaryCountryCode,
+  });
 
-  const propertyCount = new Set(bookings.map((booking) => booking.propertyName)).size;
+  const propertyCount = new Set(filteredBookings.map((booking) => booking.propertyName)).size;
 
   return (
     <WorkspaceShell
@@ -45,22 +80,34 @@ export default async function BookingsPage() {
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
-      currencyCode={userSettings.currencyCode}
+      currencyCode={view.displayCurrencyCode}
       latestImport={latestImport}
     >
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <FilterBar
+            years={view.availableYears}
+            channels={view.availableChannels}
+            countries={view.availableCountries}
+            selectedYear={view.filters.year}
+            selectedMonth={view.filters.month}
+            selectedChannel={view.filters.channel}
+            selectedCountryCode={view.filters.countryCode}
+          />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
-          <SectionCard title="Total bookings">
+          <SectionCard title="Bookings in view">
             <div className="flex items-center gap-3">
               <div className="workspace-icon-chip rounded-2xl p-3">
                 <BookOpenText className="h-5 w-5" />
               </div>
               <p className="text-2xl font-semibold text-[var(--workspace-text)]">
-                {formatNumber(bookings.length)}
+                {formatNumber(filteredBookings.length)}
               </p>
             </div>
           </SectionCard>
-          <SectionCard title="Properties used">
+          <SectionCard title="Properties in view">
             <div className="flex items-center gap-3">
               <div className="workspace-icon-chip rounded-2xl p-3">
                 <Home className="h-5 w-5" />
@@ -79,11 +126,11 @@ export default async function BookingsPage() {
 
         <SectionCard
           title="All Bookings"
-          subtitle="Every booking in this business account. Edit and delete actions only affect your own workspace."
+          subtitle="Use the filters above to focus by market, year, month, and channel."
         >
           <BookingsManager
-            bookings={bookings}
-            currencyCode={userSettings.currencyCode}
+            bookings={filteredBookings}
+            currencyCode={view.displayCurrencyCode}
             properties={properties}
           />
         </SectionCard>

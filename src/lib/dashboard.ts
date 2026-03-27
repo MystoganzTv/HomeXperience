@@ -180,6 +180,59 @@ export function getDashboardFilters(
   };
 }
 
+export function filterBookingsForFilters({
+  bookings,
+  filters,
+  properties,
+  fallbackCountryCode,
+}: {
+  bookings: BookingRecord[];
+  filters: DashboardFilters;
+  properties: PropertyDefinition[];
+  fallbackCountryCode: CountryCode;
+}) {
+  const propertyCountryMap = createPropertyCountryMap(properties, fallbackCountryCode);
+
+  return bookings
+    .filter((booking) => {
+      const countryCode = resolveRecordCountryCode(
+        booking.propertyName,
+        propertyCountryMap,
+        fallbackCountryCode,
+      );
+
+      return filters.countryCode === "all" || countryCode === filters.countryCode;
+    })
+    .filter((booking) => matchesDateFilter(booking.checkIn, filters.year, filters.month))
+    .filter((booking) => filters.channel === "all" || booking.channel === filters.channel);
+}
+
+export function filterExpensesForFilters({
+  expenses,
+  filters,
+  properties,
+  fallbackCountryCode,
+}: {
+  expenses: ExpenseRecord[];
+  filters: DashboardFilters;
+  properties: PropertyDefinition[];
+  fallbackCountryCode: CountryCode;
+}) {
+  const propertyCountryMap = createPropertyCountryMap(properties, fallbackCountryCode);
+
+  return expenses
+    .filter((expense) => {
+      const countryCode = resolveRecordCountryCode(
+        expense.propertyName,
+        propertyCountryMap,
+        fallbackCountryCode,
+      );
+
+      return filters.countryCode === "all" || countryCode === filters.countryCode;
+    })
+    .filter((expense) => matchesDateFilter(expense.date, filters.year, filters.month));
+}
+
 export function buildDashboardView({
   bookings,
   expenses,
