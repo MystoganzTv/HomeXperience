@@ -110,3 +110,19 @@ export function getUpgradeTarget(subscription: SubscriptionState) {
 
   return "portfolio";
 }
+
+export function getPlanLabel(plan: SubscriptionPlan) {
+  if (plan === "portfolio") {
+    return "Portfolio";
+  }
+
+  if (plan === "pro") {
+    return "Pro";
+  }
+
+  if (plan === "starter") {
+    return "Starter";
+  }
+
+  return "Trial";
+}

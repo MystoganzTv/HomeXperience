@@ -33,6 +33,11 @@ cp .env.example .env.local
 - `GOOGLE_CLIENT_SECRET`
 - `DATABASE_URL` if you want Postgres locally
 - `ADMIN_EMAILS` if you want to restrict access
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_STARTER`
+- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_PORTFOLIO`
 
 4. Start the app:
 
@@ -70,8 +75,29 @@ Set these environment variables in Netlify:
 - `GOOGLE_CLIENT_SECRET`
 - `DATABASE_URL` if you are bringing your own Postgres
 - `ADMIN_EMAILS` if needed
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_STARTER`
+- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_PORTFOLIO`
 
 If you use Netlify DB, Netlify will provision and manage `NETLIFY_DATABASE_URL` for you automatically.
+
+## Stripe Billing
+
+Hostlyx uses Stripe Checkout for paid upgrades and a webhook to sync active plans back into the app.
+
+Configure these endpoints in Stripe:
+
+- Success and cancel return path: `https://hostlyx1.netlify.app/pricing`
+- Webhook endpoint: `https://hostlyx1.netlify.app/api/stripe/webhook`
+
+Recommended Stripe webhook events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
 
 Then deploy with:
 

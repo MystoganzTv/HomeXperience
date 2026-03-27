@@ -114,7 +114,7 @@ export default async function ReportsPage({
             />
           </div>
           <ExportReportLink
-            className="h-14 rounded-[22px] border border-[var(--workspace-border)] bg-[rgba(255,255,255,0.045)] px-4 text-[15px] font-semibold text-[var(--workspace-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition hover:border-[var(--workspace-accent)]/28 hover:bg-[rgba(255,255,255,0.072)]"
+            className="h-[72px] rounded-[28px] border border-[var(--workspace-accent)]/32 bg-[linear-gradient(180deg,rgba(31,83,93,0.92)_0%,rgba(22,65,74,0.92)_100%)] px-7 text-[15px] font-semibold text-slate-100 shadow-[0_18px_34px_rgba(6,20,35,0.22),inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[var(--workspace-accent)]/46 hover:bg-[linear-gradient(180deg,rgba(37,94,104,0.94)_0%,rgba(26,72,82,0.94)_100%)]"
           />
         </div>
       }

@@ -380,7 +380,7 @@ export function DashboardShell({
               </Link>
             ) : null}
             {reportExportEnabled ? (
-              <ExportReportLink className="workspace-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition" />
+              <ExportReportLink className="h-14 rounded-[24px] border border-[var(--workspace-accent)]/28 bg-[linear-gradient(180deg,rgba(31,83,93,0.88)_0%,rgba(22,65,74,0.88)_100%)] px-5 text-sm font-semibold text-slate-100 shadow-[0_18px_34px_rgba(6,20,35,0.2),inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-[var(--workspace-accent)]/42 hover:bg-[linear-gradient(180deg,rgba(37,94,104,0.92)_0%,rgba(26,72,82,0.92)_100%)]" />
             ) : null}
             <button
               type="button"

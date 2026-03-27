@@ -71,6 +71,9 @@ type StoredSubscription = {
   trialEndsAt: string;
   activatedAt: string | null;
   updatedAt: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
 };
 
 type StoredProperty = {
@@ -295,7 +298,10 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       trial_started_at TEXT NOT NULL,
       trial_ends_at TEXT NOT NULL,
       activated_at TEXT,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      stripe_price_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS properties (
@@ -336,6 +342,18 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "imports", "owner_email")) {
     db.exec("ALTER TABLE imports ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
+  }
+
+  if (!hasColumn(db, "subscriptions", "stripe_customer_id")) {
+    db.exec("ALTER TABLE subscriptions ADD COLUMN stripe_customer_id TEXT;");
+  }
+
+  if (!hasColumn(db, "subscriptions", "stripe_subscription_id")) {
+    db.exec("ALTER TABLE subscriptions ADD COLUMN stripe_subscription_id TEXT;");
+  }
+
+  if (!hasColumn(db, "subscriptions", "stripe_price_id")) {
+    db.exec("ALTER TABLE subscriptions ADD COLUMN stripe_price_id TEXT;");
   }
 
   if (!hasColumn(db, "imports", "property_name")) {
@@ -582,7 +600,10 @@ async function initializePostgresSchema() {
           trial_started_at TIMESTAMPTZ NOT NULL,
           trial_ends_at TIMESTAMPTZ NOT NULL,
           activated_at TIMESTAMPTZ,
-          updated_at TIMESTAMPTZ NOT NULL
+          updated_at TIMESTAMPTZ NOT NULL,
+          stripe_customer_id TEXT,
+          stripe_subscription_id TEXT,
+          stripe_price_id TEXT
         );
 
         CREATE TABLE IF NOT EXISTS properties (
@@ -624,6 +645,18 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE imports
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE subscriptions
+        ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT
+      `);
+      await pool.query(`
+        ALTER TABLE subscriptions
+        ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT
+      `);
+      await pool.query(`
+        ALTER TABLE subscriptions
+        ADD COLUMN IF NOT EXISTS stripe_price_id TEXT
       `);
       await pool.query(`
         UPDATE imports
@@ -936,6 +969,9 @@ function cloneSubscription(subscription: StoredSubscription): SubscriptionState 
     trialEndsAt: subscription.trialEndsAt,
     activatedAt: subscription.activatedAt,
     updatedAt: subscription.updatedAt,
+    stripeCustomerId: subscription.stripeCustomerId,
+    stripeSubscriptionId: subscription.stripeSubscriptionId,
+    stripePriceId: subscription.stripePriceId,
   };
 }
 
@@ -951,9 +987,12 @@ async function upsertStoredSubscription(nextSubscription: StoredSubscription) {
           trial_started_at,
           trial_ends_at,
           activated_at,
-          updated_at
+          updated_at,
+          stripe_customer_id,
+          stripe_subscription_id,
+          stripe_price_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (owner_email)
         DO UPDATE SET
           plan = EXCLUDED.plan,
@@ -961,7 +1000,10 @@ async function upsertStoredSubscription(nextSubscription: StoredSubscription) {
           trial_started_at = EXCLUDED.trial_started_at,
           trial_ends_at = EXCLUDED.trial_ends_at,
           activated_at = EXCLUDED.activated_at,
-          updated_at = EXCLUDED.updated_at
+          updated_at = EXCLUDED.updated_at,
+          stripe_customer_id = EXCLUDED.stripe_customer_id,
+          stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+          stripe_price_id = EXCLUDED.stripe_price_id
       `,
       [
         nextSubscription.ownerEmail,
@@ -971,6 +1013,9 @@ async function upsertStoredSubscription(nextSubscription: StoredSubscription) {
         nextSubscription.trialEndsAt,
         nextSubscription.activatedAt,
         nextSubscription.updatedAt,
+        nextSubscription.stripeCustomerId,
+        nextSubscription.stripeSubscriptionId,
+        nextSubscription.stripePriceId,
       ],
     );
 
@@ -1000,16 +1045,22 @@ async function upsertStoredSubscription(nextSubscription: StoredSubscription) {
         trial_started_at,
         trial_ends_at,
         activated_at,
-        updated_at
+        updated_at,
+        stripe_customer_id,
+        stripe_subscription_id,
+        stripe_price_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(owner_email) DO UPDATE SET
         plan = excluded.plan,
         status = excluded.status,
         trial_started_at = excluded.trial_started_at,
         trial_ends_at = excluded.trial_ends_at,
         activated_at = excluded.activated_at,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        stripe_customer_id = excluded.stripe_customer_id,
+        stripe_subscription_id = excluded.stripe_subscription_id,
+        stripe_price_id = excluded.stripe_price_id
     `,
   ).run(
     nextSubscription.ownerEmail,
@@ -1019,6 +1070,9 @@ async function upsertStoredSubscription(nextSubscription: StoredSubscription) {
     nextSubscription.trialEndsAt,
     nextSubscription.activatedAt,
     nextSubscription.updatedAt,
+    nextSubscription.stripeCustomerId,
+    nextSubscription.stripeSubscriptionId,
+    nextSubscription.stripePriceId,
   );
 }
 
@@ -3985,6 +4039,9 @@ function createDefaultStoredSubscription(ownerEmail: string): StoredSubscription
     trialEndsAt: getTrialEndDate(trialStartedAt),
     activatedAt: null,
     updatedAt: trialStartedAt,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    stripePriceId: null,
   };
 }
 
@@ -4026,6 +4083,33 @@ function normalizeStoredSubscription(
       getRowValue(row as Record<string, unknown>, "updatedAt", "updated_at", "updatedat"),
       updatedAtFallback,
     ),
+    stripeCustomerId: (() => {
+      const value = getRowValue(
+        row as Record<string, unknown>,
+        "stripeCustomerId",
+        "stripe_customer_id",
+        "stripecustomerid",
+      );
+      return typeof value === "string" && value.trim() ? value : null;
+    })(),
+    stripeSubscriptionId: (() => {
+      const value = getRowValue(
+        row as Record<string, unknown>,
+        "stripeSubscriptionId",
+        "stripe_subscription_id",
+        "stripesubscriptionid",
+      );
+      return typeof value === "string" && value.trim() ? value : null;
+    })(),
+    stripePriceId: (() => {
+      const value = getRowValue(
+        row as Record<string, unknown>,
+        "stripePriceId",
+        "stripe_price_id",
+        "stripepriceid",
+      );
+      return typeof value === "string" && value.trim() ? value : null;
+    })(),
   };
 }
 
@@ -4119,7 +4203,10 @@ export async function getSubscriptionState(ownerEmail: string): Promise<Subscrip
           trial_started_at AS trialStartedAt,
           trial_ends_at AS trialEndsAt,
           activated_at AS activatedAt,
-          updated_at AS updatedAt
+          updated_at AS updatedAt,
+          stripe_customer_id AS stripeCustomerId,
+          stripe_subscription_id AS stripeSubscriptionId,
+          stripe_price_id AS stripePriceId
         FROM subscriptions
         WHERE owner_email = $1
       `,
@@ -4194,7 +4281,10 @@ export async function getSubscriptionState(ownerEmail: string): Promise<Subscrip
           trial_started_at AS trialStartedAt,
           trial_ends_at AS trialEndsAt,
           activated_at AS activatedAt,
-          updated_at AS updatedAt
+          updated_at AS updatedAt,
+          stripe_customer_id AS stripeCustomerId,
+          stripe_subscription_id AS stripeSubscriptionId,
+          stripe_price_id AS stripePriceId
         FROM subscriptions
         WHERE owner_email = ?
       `,
@@ -4240,9 +4330,15 @@ export async function getSubscriptionState(ownerEmail: string): Promise<Subscrip
 export async function updateSubscriptionPlan({
   ownerEmail,
   plan,
+  stripeCustomerId,
+  stripeSubscriptionId,
+  stripePriceId,
 }: {
   ownerEmail: string;
   plan: SubscriptionPlan;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
@@ -4256,6 +4352,9 @@ export async function updateSubscriptionPlan({
     trialEndsAt: currentSubscription.trialEndsAt,
     activatedAt: updatedAt,
     updatedAt,
+    stripeCustomerId: stripeCustomerId ?? currentSubscription.stripeCustomerId,
+    stripeSubscriptionId: stripeSubscriptionId ?? currentSubscription.stripeSubscriptionId,
+    stripePriceId: stripePriceId ?? currentSubscription.stripePriceId,
   };
 
   await upsertStoredSubscription(nextSubscription);
@@ -4275,7 +4374,109 @@ export async function revokeSubscriptionAccess(ownerEmail: string) {
     trialEndsAt: currentSubscription.trialEndsAt,
     activatedAt: currentSubscription.activatedAt,
     updatedAt,
+    stripeCustomerId: currentSubscription.stripeCustomerId,
+    stripeSubscriptionId: currentSubscription.stripeSubscriptionId,
+    stripePriceId: currentSubscription.stripePriceId,
   });
+}
+
+export async function updateSubscriptionStripeReferences({
+  ownerEmail,
+  stripeCustomerId,
+  stripeSubscriptionId,
+  stripePriceId,
+}: {
+  ownerEmail: string;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const currentSubscription = await getSubscriptionState(normalizedEmail);
+
+  await upsertStoredSubscription({
+    ownerEmail: normalizedEmail,
+    plan: currentSubscription.plan,
+    status: currentSubscription.status,
+    trialStartedAt: currentSubscription.trialStartedAt,
+    trialEndsAt: currentSubscription.trialEndsAt,
+    activatedAt: currentSubscription.activatedAt,
+    updatedAt: new Date().toISOString(),
+    stripeCustomerId: stripeCustomerId ?? currentSubscription.stripeCustomerId,
+    stripeSubscriptionId: stripeSubscriptionId ?? currentSubscription.stripeSubscriptionId,
+    stripePriceId: stripePriceId ?? currentSubscription.stripePriceId,
+  });
+}
+
+export async function syncSubscriptionFromStripe({
+  ownerEmail,
+  plan,
+  status,
+  stripeCustomerId,
+  stripeSubscriptionId,
+  stripePriceId,
+}: {
+  ownerEmail: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const currentSubscription = await getSubscriptionState(normalizedEmail);
+  const updatedAt = new Date().toISOString();
+
+  await upsertStoredSubscription({
+    ownerEmail: normalizedEmail,
+    plan,
+    status,
+    trialStartedAt: currentSubscription.trialStartedAt,
+    trialEndsAt: currentSubscription.trialEndsAt,
+    activatedAt:
+      status === "active" ? currentSubscription.activatedAt ?? updatedAt : currentSubscription.activatedAt,
+    updatedAt,
+    stripeCustomerId: stripeCustomerId ?? currentSubscription.stripeCustomerId,
+    stripeSubscriptionId: stripeSubscriptionId ?? currentSubscription.stripeSubscriptionId,
+    stripePriceId: stripePriceId ?? currentSubscription.stripePriceId,
+  });
+}
+
+export async function findOwnerEmailByStripeCustomerId(stripeCustomerId: string) {
+  await ensureDatabase();
+  const normalizedCustomerId = stripeCustomerId.trim();
+
+  if (!normalizedCustomerId) {
+    return null;
+  }
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      "SELECT owner_email AS ownerEmail FROM subscriptions WHERE stripe_customer_id = $1 LIMIT 1",
+      [normalizedCustomerId],
+    );
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    const value = row ? getRowValue(row, "ownerEmail") : null;
+    return typeof value === "string" && value ? value : null;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    return (
+      store.subscriptions.find((entry) => entry.stripeCustomerId === normalizedCustomerId)?.ownerEmail ??
+      null
+    );
+  }
+
+  const db = getSQLiteDatabase();
+  const row = db
+    .prepare("SELECT owner_email AS ownerEmail FROM subscriptions WHERE stripe_customer_id = ? LIMIT 1")
+    .get(normalizedCustomerId) as Record<string, unknown> | undefined;
+  const value = row ? getRowValue(row, "ownerEmail") : null;
+  return typeof value === "string" && value ? value : null;
 }
 
 async function getUserRecordCounts(ownerEmail: string) {

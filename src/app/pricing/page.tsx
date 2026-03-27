@@ -8,6 +8,8 @@ import { MarketingFooter } from "@/components/marketing-footer";
 import { MarketingHeader } from "@/components/marketing-header";
 import { SubscriptionPlanButton } from "@/components/subscription-plan-button";
 
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
 type PricingPlan = {
   name: "Starter" | "Pro" | "Portfolio";
   tagline: string;
@@ -49,7 +51,12 @@ const plans: PricingPlan[] = [
   },
 ];
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const resolvedSearchParams = await searchParams;
   const session = await getAuthSession();
   const signedIn = Boolean(session?.user?.email);
   const subscription =
@@ -63,6 +70,8 @@ export default async function PricingPage() {
         ? "/dashboard"
         : "/onboarding"
       : "/login";
+  const billingState =
+    typeof resolvedSearchParams.billing === "string" ? resolvedSearchParams.billing : undefined;
 
   return (
     <>
@@ -84,6 +93,16 @@ export default async function PricingPage() {
               <span className="font-semibold">{subscriptionBadge.label}</span>
               <span className="text-slate-400">•</span>
               <span className="text-slate-400">{subscriptionBadge.detail}</span>
+            </div>
+          ) : null}
+          {billingState === "success" ? (
+            <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-emerald-400/18 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+              Stripe checkout completed. Your plan will refresh in Hostlyx as soon as the billing webhook confirms the subscription.
+            </div>
+          ) : null}
+          {billingState === "cancelled" ? (
+            <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300">
+              Checkout was cancelled. Your data is still safe, and you can upgrade again anytime.
             </div>
           ) : null}
         </section>
@@ -133,7 +152,7 @@ export default async function PricingPage() {
                 <SubscriptionPlanButton
                   plan={plan.name.toLowerCase() as "starter" | "pro" | "portfolio"}
                   currentPlan={subscription?.status === "active" ? subscription.plan : "trial"}
-                  redirectTo={primaryCtaHref}
+                  redirectTo="/pricing"
                   labels={{
                     currentPlan: "Plan actual",
                     starter: "Empezar",

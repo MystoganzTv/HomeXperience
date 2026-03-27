@@ -93,6 +93,9 @@ export type SubscriptionState = {
   trialEndsAt: string;
   activatedAt: string | null;
   updatedAt: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
 };
 
 export type AdminUserSummary = {

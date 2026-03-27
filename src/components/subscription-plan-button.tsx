@@ -54,12 +54,27 @@ export function SubscriptionPlanButton({
                   headers: {
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify({ plan }),
+                  body: JSON.stringify({ plan, returnPath: redirectTo }),
                 });
-                const payload = (await response.json()) as { error?: string };
+                const payload = (await response.json()) as {
+                  error?: string;
+                  url?: string;
+                  redirectTo?: string;
+                };
 
                 if (!response.ok) {
                   setError(payload.error ?? labels?.error ?? "The plan could not be updated.");
+                  return;
+                }
+
+                if (payload.url) {
+                  window.location.assign(payload.url);
+                  return;
+                }
+
+                if (payload.redirectTo) {
+                  router.push(payload.redirectTo);
+                  router.refresh();
                   return;
                 }
 
