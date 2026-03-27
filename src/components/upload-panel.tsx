@@ -336,16 +336,27 @@ export function UploadPanel({
         body: upload,
       });
 
-      const payload = (await response.json()) as {
+      const rawResponse = await response.text();
+      let payload: {
         error?: string;
         message?: string;
-      };
+      } = {};
+
+      try {
+        payload = rawResponse ? (JSON.parse(rawResponse) as typeof payload) : {};
+      } catch {
+        payload = {};
+      }
 
       if (!response.ok) {
         setUploadState("error");
         setToast({
           tone: "error",
-          message: payload.error ?? "Import failed. Check the workbook format and try again.",
+          message:
+            payload.error ??
+            (rawResponse.trim()
+              ? `Import failed (${response.status}). ${rawResponse.trim().slice(0, 220)}`
+              : `Import failed with status ${response.status}.`),
         });
         return;
       }
