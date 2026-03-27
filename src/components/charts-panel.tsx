@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -55,10 +56,6 @@ function topCostShare(expensesByCategory: CategoryPoint[]) {
   }));
 }
 
-function monthlyMargin(point: MonthlyPoint) {
-  return point.revenue > 0 ? point.profit / point.revenue : 0;
-}
-
 export function ChartsPanel({
   monthlySummary,
   expensesByCategory,
@@ -72,7 +69,12 @@ export function ChartsPanel({
   currencyCode: CurrencyCode;
   mixedCurrencyMode?: boolean;
 }) {
+  const [profitChartMode, setProfitChartMode] = useState<"trend" | "bars">("trend");
   const costStructure = topCostShare(expensesByCategory);
+  const largestProfitMagnitude = Math.max(
+    ...monthlySummary.map((month) => Math.abs(month.profit)),
+    1,
+  );
 
   if (mixedCurrencyMode) {
     return (
@@ -90,79 +92,93 @@ export function ChartsPanel({
       <SectionCard
         title="Profit Over Time"
         subtitle="The fastest way to see if the business is actually becoming more profitable."
+        action={
+          monthlySummary.length > 0 ? (
+            <div className="inline-flex rounded-2xl border border-white/8 bg-white/[0.03] p-1">
+              {[
+                { value: "trend", label: "Trend" },
+                { value: "bars", label: "Bars" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setProfitChartMode(option.value as "trend" | "bars")}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                    profitChartMode === option.value
+                      ? "bg-[var(--workspace-accent-soft)] text-[var(--workspace-text)]"
+                      : "text-[var(--workspace-muted)] hover:text-[var(--workspace-text)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null
+        }
       >
         {monthlySummary.length === 0 ? (
           <EmptyChartState label="No monthly data available for the current filters." />
+        ) : profitChartMode === "trend" ? (
+          <div className="h-[320px] min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlySummary}>
+                <defs>
+                  <linearGradient id="profit-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#58c4b6" stopOpacity={0.55} />
+                    <stop offset="95%" stopColor="#58c4b6" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: "#93a4bf", fontSize: 12 }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tickFormatter={(value) => compactCurrency(value, currencyCode)}
+                  tick={{ fill: "#93a4bf", fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={72}
+                />
+                <Tooltip
+                  formatter={(value) => formatTooltipValue(value, currencyCode)}
+                  contentStyle={{
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "#101c2e",
+                    color: "#e7edf5",
+                  }}
+                />
+                <Area type="monotone" dataKey="profit" stroke="#58c4b6" strokeWidth={3} fill="url(#profit-fill)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
-          <div className="space-y-5">
-            <div className="h-[320px] min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlySummary}>
-                  <defs>
-                    <linearGradient id="profit-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#58c4b6" stopOpacity={0.55} />
-                      <stop offset="95%" stopColor="#58c4b6" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: "#93a4bf", fontSize: 12 }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    tickFormatter={(value) => compactCurrency(value, currencyCode)}
-                    tick={{ fill: "#93a4bf", fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={72}
-                  />
-                  <Tooltip
-                    formatter={(value) => formatTooltipValue(value, currencyCode)}
-                    contentStyle={{
-                      borderRadius: 18,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "#101c2e",
-                      color: "#e7edf5",
-                    }}
-                  />
-                  <Area type="monotone" dataKey="profit" stroke="#58c4b6" strokeWidth={3} fill="url(#profit-fill)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="grid min-h-[320px] grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+            {monthlySummary.map((month) => {
+              const barHeight = `${Math.max((Math.abs(month.profit) / largestProfitMagnitude) * 72, 20)}%`;
+              const isPositive = month.profit >= 0;
 
-            <div className="workspace-soft-card rounded-[22px] p-4">
-              <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--workspace-text)]">Profit Table</p>
-                  <p className="mt-1 text-xs text-[var(--workspace-muted)]">Month-by-month read for the same trend above.</p>
-                </div>
-                <span className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
-                  Live
-                </span>
-              </div>
-
-              <div className="mt-3 overflow-hidden rounded-[18px] border border-white/8">
-                <div className="grid grid-cols-[0.8fr_1fr_0.8fr_0.7fr] gap-3 bg-white/[0.04] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
-                  <span>Month</span>
-                  <span>Profit</span>
-                  <span>Margin</span>
-                  <span>Nights</span>
-                </div>
-
-                <div className="divide-y divide-white/8">
-                  {monthlySummary.map((month) => (
+              return (
+                <div key={`profit-pill-${month.label}`} className="flex flex-col items-center gap-4">
+                  <div className="flex h-[220px] w-full max-w-[84px] items-end rounded-[26px] bg-white/[0.03] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
                     <div
-                      key={`profit-table-${month.label}`}
-                      className="grid grid-cols-[0.8fr_1fr_0.8fr_0.7fr] gap-3 px-4 py-3 text-sm"
-                    >
-                      <span className="font-medium text-[var(--workspace-text)]">{month.label}</span>
-                      <span className={month.profit >= 0 ? "font-medium text-emerald-300" : "font-medium text-rose-200"}>
-                        {formatCurrency(month.profit, false, currencyCode)}
-                      </span>
-                      <span className="text-[var(--workspace-text)]">{formatPercent(monthlyMargin(month))}</span>
-                      <span className="text-[var(--workspace-muted)]">{month.nights}</span>
-                    </div>
-                  ))}
+                      className={`w-full rounded-[22px] shadow-[0_18px_35px_rgba(2,6,23,0.28)] ${
+                        isPositive
+                          ? "bg-[linear-gradient(180deg,#67d4c7_0%,#2f8f84_100%)]"
+                          : "bg-[linear-gradient(180deg,#f2a6ae_0%,#c66474_100%)]"
+                      }`}
+                      style={{ height: barHeight }}
+                      title={`${month.label}: ${formatCurrency(month.profit, false, currencyCode)}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1 text-center">
+                    <p className="text-sm font-medium text-[var(--workspace-text)]">{month.label}</p>
+                    <p className={`text-xs ${isPositive ? "text-emerald-300" : "text-rose-200"}`}>
+                      {formatCurrency(month.profit, false, currencyCode)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         )}
       </SectionCard>
