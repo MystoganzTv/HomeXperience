@@ -6,8 +6,8 @@ export function ShareReportPrintButton({
   href: string;
 }) {
   return (
-    <a href={href} className={className}>
-      Export PDF
+    <a href={href} className={`inline-flex items-center justify-center whitespace-nowrap ${className}`}>
+      Export to PDF
     </a>
   );
 }
