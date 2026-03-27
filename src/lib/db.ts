@@ -45,6 +45,14 @@ type StoredUserSettings = UserSettings & {
   ownerEmail: string;
 };
 
+type StoredAuthUser = {
+  ownerEmail: string;
+  fullName: string;
+  passwordHash: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type StoredProperty = {
   id: number;
   ownerEmail: string;
@@ -71,6 +79,7 @@ type MemoryStore = {
   expenses: StoredExpense[];
   closures: StoredCalendarClosure[];
   settings: StoredUserSettings[];
+  authUsers: StoredAuthUser[];
   properties: StoredProperty[];
   propertyUnits: StoredPropertyUnit[];
 };
@@ -139,9 +148,14 @@ function getMemoryStore() {
       expenses: [],
       closures: [],
       settings: [],
+      authUsers: [],
       properties: [],
       propertyUnits: [],
     };
+  }
+
+  if (!globalThis.__hostlyxMemoryStore.authUsers) {
+    globalThis.__hostlyxMemoryStore.authUsers = [];
   }
 
   return globalThis.__hostlyxMemoryStore;
@@ -240,6 +254,14 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS auth_users (
+      owner_email TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS properties (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_email TEXT NOT NULL,
@@ -261,6 +283,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
     CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
     CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+    CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
   `);
@@ -498,6 +521,14 @@ async function initializePostgresSchema() {
           updated_at TIMESTAMPTZ NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS auth_users (
+          owner_email TEXT PRIMARY KEY,
+          full_name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS properties (
           id BIGSERIAL PRIMARY KEY,
           owner_email TEXT NOT NULL,
@@ -519,6 +550,7 @@ async function initializePostgresSchema() {
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
         CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+        CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_property_units_property_name ON property_units(property_id, name);
       `);
@@ -806,6 +838,16 @@ function cloneUserSettings(settings: StoredUserSettings): UserSettings {
     currencyCode: settings.currencyCode,
     taxCountryCode: settings.taxCountryCode,
     taxRate: settings.taxRate,
+  };
+}
+
+function cloneAuthUser(authUser: StoredAuthUser) {
+  return {
+    ownerEmail: authUser.ownerEmail,
+    fullName: authUser.fullName,
+    passwordHash: authUser.passwordHash,
+    createdAt: authUser.createdAt,
+    updatedAt: authUser.updatedAt,
   };
 }
 
@@ -3608,4 +3650,138 @@ export async function upsertUserSettings({
     normalizedTaxRate,
     updatedAt,
   );
+}
+
+export async function getAuthUserByEmail(email: string) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(email);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          owner_email AS ownerEmail,
+          full_name AS fullName,
+          password_hash AS passwordHash,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+        FROM auth_users
+        WHERE owner_email = $1
+      `,
+      [normalizedEmail],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return {
+      ownerEmail: String(result.rows[0].owneremail ?? result.rows[0].ownerEmail),
+      fullName: String(result.rows[0].fullname ?? result.rows[0].fullName),
+      passwordHash: String(result.rows[0].passwordhash ?? result.rows[0].passwordHash),
+      createdAt: String(result.rows[0].createdat ?? result.rows[0].createdAt),
+      updatedAt: String(result.rows[0].updatedat ?? result.rows[0].updatedAt),
+    };
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const authUser = store.authUsers.find((entry) => entry.ownerEmail === normalizedEmail);
+    return authUser ? cloneAuthUser(authUser) : null;
+  }
+
+  const db = getSQLiteDatabase();
+  const row = db
+    .prepare(
+      `
+        SELECT
+          owner_email AS ownerEmail,
+          full_name AS fullName,
+          password_hash AS passwordHash,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+        FROM auth_users
+        WHERE owner_email = ?
+      `,
+    )
+    .get(normalizedEmail) as Record<string, unknown> | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ownerEmail: String(getRowValue(row, "ownerEmail", "owneremail")),
+    fullName: String(getRowValue(row, "fullName", "fullname")),
+    passwordHash: String(getRowValue(row, "passwordHash", "passwordhash")),
+    createdAt: String(getRowValue(row, "createdAt", "createdat")),
+    updatedAt: String(getRowValue(row, "updatedAt", "updatedat")),
+  };
+}
+
+export async function createAuthUser({
+  email,
+  fullName,
+  passwordHash,
+}: {
+  email: string;
+  fullName: string;
+  passwordHash: string;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(email);
+  const normalizedFullName = fullName.trim() || normalizedEmail;
+  const existingUser = await getAuthUserByEmail(normalizedEmail);
+
+  if (existingUser) {
+    throw new Error("An account with that email already exists.");
+  }
+
+  const createdAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    await pool.query(
+      `
+        INSERT INTO auth_users (
+          owner_email,
+          full_name,
+          password_hash,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [normalizedEmail, normalizedFullName, passwordHash, createdAt, createdAt],
+    );
+
+    return;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    store.authUsers.push({
+      ownerEmail: normalizedEmail,
+      fullName: normalizedFullName,
+      passwordHash,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    return;
+  }
+
+  const db = getSQLiteDatabase();
+  db.prepare(
+    `
+      INSERT INTO auth_users (
+        owner_email,
+        full_name,
+        password_hash,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?)
+    `,
+  ).run(normalizedEmail, normalizedFullName, passwordHash, createdAt, createdAt);
 }

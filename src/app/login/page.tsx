@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Lock, Mail, ShieldCheck } from "lucide-react";
 import { SignInButton } from "@/components/auth-buttons";
 import { BrandLogo } from "@/components/brand-logo";
+import { EmailAuthForm } from "@/components/email-auth-form";
 import { getAuthSession, hasGoogleAuthConfig } from "@/lib/auth";
 
 function GoogleMark() {
@@ -69,46 +69,7 @@ export default async function LoginPage() {
             <span className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <div className="space-y-5">
-            <div>
-              <label className="block text-center text-sm font-semibold text-slate-700">
-                Email
-              </label>
-              <div className="login-input-shell mt-3 flex items-center gap-3 rounded-[18px] px-4 py-4">
-                <Mail className="h-5 w-5 text-slate-400" />
-                <input
-                  disabled
-                  defaultValue="you@example.com"
-                  aria-label="Email sign-in coming soon"
-                  className="w-full bg-transparent text-base text-slate-400 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-center text-sm font-semibold text-slate-700">
-                Password
-              </label>
-              <div className="login-input-shell mt-3 flex items-center gap-3 rounded-[18px] px-4 py-4">
-                <Lock className="h-5 w-5 text-slate-400" />
-                <input
-                  disabled
-                  defaultValue="••••••••"
-                  aria-label="Password sign-in coming soon"
-                  className="w-full bg-transparent text-base text-slate-400 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            disabled
-            className="login-submit-button flex w-full items-center justify-center gap-3 rounded-[18px] px-5 py-4 text-lg font-semibold"
-          >
-            <ShieldCheck className="h-5 w-5" />
-            Email sign-in coming soon
-          </button>
+          <EmailAuthForm />
 
           {!hasGoogleAuthConfig ? (
             <div className="rounded-[18px] border border-amber-400/25 bg-amber-400/12 px-4 py-3 text-sm leading-6 text-amber-900">
@@ -118,8 +79,7 @@ export default async function LoginPage() {
             </div>
           ) : (
             <p className="text-center text-sm leading-6 text-slate-500">
-              Google sign-in is live now. Email and password login can come later
-              if you decide to add it.
+              Use Google if you want the fastest access, or sign in with email and password below.
             </p>
           )}
         </div>
@@ -129,7 +89,7 @@ export default async function LoginPage() {
             Back to home
           </Link>
           <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:block" />
-          <p>Need an account? Continue with Google</p>
+          <p>Create an account with email or continue with Google</p>
         </div>
 
         <div className="mt-8 rounded-[22px] bg-slate-950 px-5 py-4 text-sm text-slate-300">
