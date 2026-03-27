@@ -159,7 +159,9 @@ export function WorkspaceShell({
                     </span>
                   ) : null}
                 </div>
-                {subscriptionBadge?.detail ? (
+                {subscriptionBadge?.detail &&
+                subscriptionBadge.tone !== "trial" &&
+                subscriptionBadge.tone !== "expired" ? (
                   <p className="mt-3 text-xs text-[var(--workspace-sidebar-muted)]">
                     {subscriptionBadge.detail}
                   </p>
