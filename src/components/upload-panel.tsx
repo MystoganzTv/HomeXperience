@@ -38,6 +38,11 @@ type UploadToast = {
   message: string;
 };
 
+type ImportResponsePayload = {
+  error?: string;
+  message?: string;
+};
+
 function inputClassName() {
   return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
 }
@@ -97,6 +102,19 @@ async function hashFile(file: File) {
   return Array.from(new Uint8Array(digest))
     .map((value) => value.toString(16).padStart(2, "0"))
     .join("");
+}
+
+async function parseImportResponse(response: Response) {
+  const rawResponse = await response.text();
+  let payload: ImportResponsePayload = {};
+
+  try {
+    payload = rawResponse ? (JSON.parse(rawResponse) as ImportResponsePayload) : {};
+  } catch {
+    payload = {};
+  }
+
+  return { rawResponse, payload };
 }
 
 export function UploadPanel({
@@ -325,62 +343,86 @@ export function UploadPanel({
     setToast(null);
 
     try {
-      const upload = new FormData();
+      const succeededFiles: File[] = [];
+      const failedResults: Array<{ file: File; message: string }> = [];
+
       for (const file of importableFiles) {
+        const upload = new FormData();
         upload.append("files", file);
-      }
-      upload.set("propertyName", selectedPropertyName);
+        upload.set("propertyName", selectedPropertyName);
 
-      const response = await fetch("/api/import", {
-        method: "POST",
-        body: upload,
-      });
-
-      const rawResponse = await response.text();
-      let payload: {
-        error?: string;
-        message?: string;
-      } = {};
-
-      try {
-        payload = rawResponse ? (JSON.parse(rawResponse) as typeof payload) : {};
-      } catch {
-        payload = {};
-      }
-
-      if (!response.ok) {
-        setUploadState("error");
-        setToast({
-          tone: "error",
-          message:
-            payload.error ??
-            (rawResponse.trim()
-              ? `Import failed (${response.status}). ${rawResponse.trim().slice(0, 220)}`
-              : `Import failed with status ${response.status}.`),
+        const response = await fetch("/api/import", {
+          method: "POST",
+          body: upload,
         });
-        return;
+        const { rawResponse, payload } = await parseImportResponse(response);
+
+        if (!response.ok) {
+          failedResults.push({
+            file,
+            message:
+              payload.error ??
+              (rawResponse.trim()
+                ? `Import failed (${response.status}). ${rawResponse.trim().slice(0, 220)}`
+                : `Import failed with status ${response.status}.`),
+          });
+          continue;
+        }
+
+        succeededFiles.push(file);
       }
 
-      setUploadState("success");
-      setToast({
-        tone: "success",
-        message:
-          payload.message ??
-          (importableFiles.length === 1
-            ? `${importableFiles[0].name} imported successfully.`
-            : `${importableFiles.length} workbooks imported successfully.`),
+      const failedKeys = new Set(failedResults.map((result) => getFileKey(result.file)));
+      const remainingFiles = selectedFiles.filter((file) => failedKeys.has(getFileKey(file)));
+      setSelectedFiles(remainingFiles);
+      setSelectedFileMeta((current) => {
+        const nextMeta: Record<string, SelectedFileMeta> = {};
+
+        for (const file of remainingFiles) {
+          const key = getFileKey(file);
+          nextMeta[key] = current[key] ?? { status: "ready" };
+        }
+
+        return nextMeta;
       });
-      setSelectedFiles([]);
-      setSelectedFileMeta({});
       if (inputRef.current) {
         inputRef.current.value = "";
       }
-      router.refresh();
+
+      if (failedResults.length === 0) {
+        setUploadState("success");
+        setToast({
+          tone: "success",
+          message:
+            succeededFiles.length === 1
+              ? `${succeededFiles[0].name} imported successfully.`
+              : `${succeededFiles.length} workbooks imported successfully into ${selectedPropertyName}.`,
+        });
+        router.refresh();
+        return;
+      }
+
+      setUploadState("error");
+      const failurePreview = failedResults
+        .slice(0, 2)
+        .map((result) => `${result.file.name}: ${result.message}`)
+        .join(" ");
+      setToast({
+        tone: "error",
+        message:
+          succeededFiles.length > 0
+            ? `${succeededFiles.length} file${succeededFiles.length === 1 ? "" : "s"} imported, but ${failedResults.length} failed. ${failurePreview}`
+            : `No files were imported. ${failurePreview}`,
+      });
+      if (succeededFiles.length > 0) {
+        router.refresh();
+      }
     } catch {
       setUploadState("error");
       setToast({
         tone: "error",
-        message: "Import failed. Check the workbook format and try again.",
+        message:
+          "Import failed while processing the selected files. Try again, or import them in smaller batches.",
       });
     }
   }
