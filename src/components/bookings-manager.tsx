@@ -4,6 +4,7 @@ import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
+import { WorkspaceDateField } from "@/components/workspace-date-field";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
 import type { BookingRecord, CurrencyCode, PropertyDefinition } from "@/lib/types";
 import { Modal } from "@/components/modal";
@@ -181,20 +182,14 @@ export function BookingsManager({
         onClose={() => setEditingBooking(null)}
       >
         {editingBooking ? (
-          <form onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
+          <form key={editingBooking.id ?? editingBooking.checkIn} onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
             <PropertyUnitFieldGroup
               properties={properties}
               initialPropertyName={editingBooking.propertyName}
               initialUnitName={editingBooking.unitName}
             />
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Check-in</span>
-              <input className={inputClassName()} type="date" name="checkIn" defaultValue={editingBooking.checkIn} required />
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Checkout</span>
-              <input className={inputClassName()} type="date" name="checkout" defaultValue={editingBooking.checkout} required />
-            </label>
+            <WorkspaceDateField name="checkIn" label="Check-in" defaultValue={editingBooking.checkIn} required />
+            <WorkspaceDateField name="checkout" label="Checkout" defaultValue={editingBooking.checkout} required />
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Guest name</span>
               <input className={inputClassName()} name="guestName" defaultValue={editingBooking.guestName} required />

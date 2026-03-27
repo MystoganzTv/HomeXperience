@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { PencilLine } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
+import { WorkspaceDateField } from "@/components/workspace-date-field";
 import type { PropertyDefinition } from "@/lib/types";
 
 function inputClassName() {
@@ -98,18 +99,8 @@ export function ManualEntryPanel({
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <form action={handleBookingSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Check-in
-              </span>
-              <input className={inputClassName()} type="date" name="checkIn" required />
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Checkout
-              </span>
-              <input className={inputClassName()} type="date" name="checkout" required />
-            </label>
+            <WorkspaceDateField name="checkIn" label="Check-in" placeholder="Select check-in" required />
+            <WorkspaceDateField name="checkout" label="Checkout" placeholder="Select checkout" required />
             <PropertyUnitFieldGroup properties={properties} />
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
@@ -175,12 +166,7 @@ export function ManualEntryPanel({
 
         <form action={handleExpenseSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Date
-              </span>
-              <input className={inputClassName()} type="date" name="date" required />
-            </label>
+            <WorkspaceDateField name="date" label="Date" placeholder="Select expense date" required />
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                 Amount

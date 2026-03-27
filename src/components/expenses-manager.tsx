@@ -4,6 +4,7 @@ import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
+import { WorkspaceDateField } from "@/components/workspace-date-field";
 import { formatCurrency, formatDateLabel } from "@/lib/format";
 import type { CurrencyCode, ExpenseRecord, PropertyDefinition } from "@/lib/types";
 import { Modal } from "@/components/modal";
@@ -166,16 +167,13 @@ export function ExpensesManager({
         onClose={() => setEditingExpense(null)}
       >
         {editingExpense ? (
-          <form onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
+          <form key={editingExpense.id ?? editingExpense.date} onSubmit={submitUpdate} className="grid gap-4 sm:grid-cols-2">
             <PropertyUnitFieldGroup
               properties={properties}
               initialPropertyName={editingExpense.propertyName}
               initialUnitName={editingExpense.unitName}
             />
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Date</span>
-              <input className={inputClassName()} type="date" name="date" defaultValue={editingExpense.date} required />
-            </label>
+            <WorkspaceDateField name="date" label="Date" defaultValue={editingExpense.date} required />
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Amount</span>
               <input className={inputClassName()} type="number" min="0.01" step="0.01" name="amount" defaultValue={editingExpense.amount} required />
