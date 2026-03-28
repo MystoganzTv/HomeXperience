@@ -749,6 +749,16 @@ export function UploadPanel({
     });
   }
 
+  function scrollToImportAction() {
+    readyToContinueRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    window.setTimeout(() => {
+      importButtonRef.current?.focus({ preventScroll: true });
+    }, 80);
+  }
+
   function scrollToAttentionTarget() {
     const target =
       (needsFocusedMapping ? mappingRef.current : null) ??
@@ -789,11 +799,7 @@ export function UploadPanel({
       }
 
       if (actionableRows > 0) {
-        readyToContinueRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-        importButtonRef.current?.focus({ preventScroll: true });
+        scrollToImportAction();
       }
 
       setShouldFocusImportAction(false);
@@ -1164,6 +1170,24 @@ export function UploadPanel({
                           <span className="rounded-full border border-[var(--workspace-accent)]/24 bg-[rgba(125,211,197,0.12)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-accent)]">
                             Import as financial statement
                           </span>
+                          {preview.canImport ? (
+                            <button
+                              type="button"
+                              onClick={handleImport}
+                              disabled={phase === "importing" || phase === "previewing"}
+                              className="workspace-button-primary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {phase === "importing" ? "Saving statement..." : "Save financial statement"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={scrollToImportAction}
+                              className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition"
+                            >
+                              Find final step
+                            </button>
+                          )}
                         </div>
                       ) : needsFocusedMapping ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1369,6 +1393,45 @@ export function UploadPanel({
                       ) : null}
                     </div>
                   ))}
+                </div>
+              ) : null}
+
+              {!needsFocusedMapping && !preview.blocksImport && preview.financialStatement ? (
+                <div className="rounded-[24px] border border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.07)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--workspace-text)]">
+                        Financial statement ready
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--workspace-muted)]">
+                        Hostlyx can save this statement now and use it for payout reconciliation.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handleImport}
+                        disabled={actionableRows <= 0 || phase === "importing" || phase === "previewing"}
+                        className="workspace-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[240px]"
+                      >
+                        {phase === "importing" ? (
+                          <>
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            Save financial statement
+                          </>
+                        ) : (
+                          "Save financial statement"
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={scrollToImportAction}
+                        className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
+                      >
+                        Jump to final summary
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
