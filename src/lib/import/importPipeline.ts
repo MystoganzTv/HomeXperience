@@ -358,12 +358,57 @@ export function buildImportPreview(
   const manualMapping = buildManualMappingPreview(workbook, options?.manualMapping);
   const shouldUseManualMapping = Boolean(options?.manualMapping && manualMapping?.requiredReady);
 
+  if (source === "airbnb_invoice") {
+    const blockMessage =
+      "This looks like an Airbnb invoice/tax file, not a reservations export. Use an Airbnb reservations or earnings export to import bookings.";
+
+    return {
+      source,
+      sourceLabel: getDetectedSourceLabel(source),
+      fileName,
+      requiresManualMapping: false,
+      blocksImport: true,
+      blockMessage,
+      manualMapping: null,
+      totalRowsRead: workbook.sheets.reduce((sum, sheet) => sum + Math.max(0, sheet.rows.length - 1), 0),
+      validRows: 0,
+      warningRows: 0,
+      duplicateRows: 0,
+      errorRows: 0,
+      skippedRows: 0,
+      expensesDetected: 0,
+      importableRows: 0,
+      bookings: [],
+      expenses: [],
+      previewRows: [],
+      reviewRows: {
+        valid: [],
+        warnings: [],
+        duplicates: [],
+        errors: [],
+      },
+      warnings: [
+        {
+          rowType: "file",
+          rowIndex: 0,
+          code: "airbnb_invoice_file",
+          message: blockMessage,
+          severity: "warning",
+        },
+      ],
+      duplicates: [],
+      canImport: false,
+    };
+  }
+
   if (source === "unknown" && !manualMapping?.requiredReady) {
     return {
       source,
       sourceLabel: getDetectedSourceLabel(source),
       fileName,
       requiresManualMapping: true,
+      blocksImport: false,
+      blockMessage: null,
       manualMapping,
       totalRowsRead: workbook.sheets.reduce((sum, sheet) => sum + Math.max(0, sheet.rows.length - 1), 0),
       validRows: 0,
@@ -499,6 +544,8 @@ export function buildImportPreview(
     sourceLabel: source === "unknown" ? "Mapped file" : getDetectedSourceLabel(source),
     fileName,
     requiresManualMapping: source === "unknown",
+    blocksImport: false,
+    blockMessage: null,
     manualMapping,
     totalRowsRead: normalized.totalRowsRead,
     validRows,

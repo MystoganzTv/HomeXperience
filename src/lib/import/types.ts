@@ -1,4 +1,9 @@
-export type ImportDetectedSource = "airbnb" | "booking" | "generic" | "unknown";
+export type ImportDetectedSource =
+  | "airbnb"
+  | "booking"
+  | "generic"
+  | "airbnb_invoice"
+  | "unknown";
 
 export type ImportCellValue = string | number | boolean | Date | null | undefined;
 export type ImportSheetRow = ImportCellValue[];
@@ -130,6 +135,8 @@ export type ImportPreview = {
   sourceLabel: string;
   fileName: string;
   requiresManualMapping: boolean;
+  blocksImport: boolean;
+  blockMessage: string | null;
   manualMapping: ImportManualMappingPreview | null;
   totalRowsRead: number;
   validRows: number;
@@ -177,6 +184,8 @@ export function getDetectedSourceLabel(source: ImportDetectedSource) {
       return "Booking.com";
     case "generic":
       return "Generic Excel";
+    case "airbnb_invoice":
+      return "Airbnb invoice/tax file";
     default:
       return "Unknown format";
   }

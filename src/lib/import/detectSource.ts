@@ -9,6 +9,23 @@ import {
 } from "./columnMatchers";
 import type { ImportDetectedSource, ParsedImportWorkbook } from "./types";
 
+const airbnbInvoiceHeaders = [
+  "numerodefactura",
+  "codigodeconfirmacion",
+  "fechadelservicio",
+  "nombredelanfitrion",
+  "numerodeidentificaciondeliva",
+  "domiciliofiscal",
+  "iddelanuncio",
+  "nombredelanuncio",
+  "listingaddress",
+  "entidademisora",
+  "direcciondelaentidademisora",
+  "tipo de iva",
+  "tipodeiva",
+  "paisnoexentodeiva",
+];
+
 export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSource {
   const hasNamedBookingsSheet = workbook.sheets.some((sheet) =>
     ["bookings", "reservas"].includes(sheet.normalizedName),
@@ -37,6 +54,14 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
       const indexes = mapOptionalColumns(row, airbnbBookingColumns);
       const matches = Object.keys(indexes).length;
       const normalizedHeaders = row.map((cell) => normalizeHeader(cell));
+      const airbnbInvoiceMatches = normalizedHeaders.filter((header) =>
+        airbnbInvoiceHeaders.includes(header),
+      ).length;
+
+      if (airbnbInvoiceMatches >= 4) {
+        return "airbnb_invoice";
+      }
+
       const hasAirbnbSpecificHeader = normalizedHeaders.some((header) =>
         [
           "confirmationcode",

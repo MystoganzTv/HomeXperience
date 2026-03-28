@@ -102,10 +102,12 @@ type ReviewRow = {
 };
 
 type ImportPreviewPayload = {
-  source: "airbnb" | "booking" | "generic" | "unknown";
+  source: "airbnb" | "booking" | "generic" | "airbnb_invoice" | "unknown";
   sourceLabel: string;
   fileName: string;
   requiresManualMapping: boolean;
+  blocksImport: boolean;
+  blockMessage: string | null;
   manualMapping: ManualMappingPreview | null;
   totalRowsRead: number;
   validRows: number;
@@ -190,6 +192,13 @@ function getSourcePresentation(source: ImportPreviewPayload["source"]) {
         badge: "Excel",
         description: "We detected your workbook structure and prepared it for review.",
       };
+    case "airbnb_invoice":
+      return {
+        icon: AlertTriangle,
+        badge: "Airbnb invoice/tax file",
+        description:
+          "This looks like an Airbnb invoice or VAT export, not a reservations export.",
+      };
     default:
       return {
         icon: Sparkles,
@@ -254,6 +263,10 @@ export function UploadPanel({
       return "Import data";
     }
 
+    if (preview.blocksImport) {
+      return "Use a reservations export";
+    }
+
     if (actionableRows > 0) {
       return `Import ${actionableRows} clean row${actionableRows === 1 ? "" : "s"}`;
     }
@@ -266,6 +279,10 @@ export function UploadPanel({
       return [];
     }
 
+    if (preview.blocksImport) {
+      return [];
+    }
+
     return [
       ...preview.reviewRows.errors,
       ...preview.reviewRows.duplicates,
@@ -275,6 +292,10 @@ export function UploadPanel({
 
   const needsFocusedMapping = useMemo(() => {
     if (!preview?.manualMapping) {
+      return false;
+    }
+
+    if (preview.blocksImport) {
       return false;
     }
 
@@ -418,6 +439,14 @@ export function UploadPanel({
       setToast({
         tone: "error",
         message: "Preview the file first so you can review issues before importing.",
+      });
+      return;
+    }
+
+    if (preview.blocksImport) {
+      setToast({
+        tone: "error",
+        message: preview.blockMessage ?? "This file is not the right format for booking imports.",
       });
       return;
     }
@@ -917,11 +946,19 @@ export function UploadPanel({
                         {getSourcePresentation(preview.source).badge}
                       </p>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--workspace-muted)]">
-                        {preview.requiresManualMapping
+                        {preview.blocksImport
+                          ? preview.blockMessage
+                          : preview.requiresManualMapping
                           ? preview.manualMapping?.message
                           : getSourcePresentation(preview.source).description}
                       </p>
-                      {needsFocusedMapping ? (
+                      {preview.blocksImport ? (
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <span className="rounded-full border border-rose-400/20 bg-rose-300/[0.08] px-3 py-1.5 text-xs font-medium text-rose-100">
+                            Use a reservations or earnings export instead
+                          </span>
+                        </div>
+                      ) : needsFocusedMapping ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <span className="rounded-full border border-amber-400/20 bg-amber-300/[0.08] px-3 py-1.5 text-xs font-medium text-amber-100">
                             We need a quick column check before preview can continue.
@@ -939,12 +976,16 @@ export function UploadPanel({
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                      preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
+                      preview.blocksImport
+                        ? "border-rose-400/24 bg-rose-400/10 text-rose-100"
+                        : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
                         ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-100"
                         : "border-amber-400/24 bg-amber-400/10 text-amber-100"
                     }`}
                   >
-                    {preview.requiresManualMapping
+                    {preview.blocksImport
+                      ? "Wrong file type"
+                      : preview.requiresManualMapping
                       ? "Manual mapping"
                       : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
                         ? "Ready to import"
@@ -952,6 +993,17 @@ export function UploadPanel({
                   </span>
                 </div>
               </div>
+
+              {preview.blocksImport ? (
+                <div className="rounded-[28px] border border-rose-400/18 bg-rose-300/[0.07] p-5 sm:p-6">
+                  <p className="text-sm font-medium text-rose-50/95">
+                    This file is useful for invoices and VAT records, but it is not the right source for bookings.
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-rose-50/75">
+                    Export your Airbnb reservations or earnings file instead, then upload it here to populate bookings, payout, and stay dates.
+                  </p>
+                </div>
+              ) : null}
 
               {shouldShowManualMapping ? (
                 <div
@@ -1059,7 +1111,7 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              {!needsFocusedMapping ? (
+              {!needsFocusedMapping && !preview.blocksImport ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     ["Bookings detected", preview.importableRows, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
@@ -1092,7 +1144,7 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              {!needsFocusedMapping && preview.errorRows > 0 ? (
+              {!needsFocusedMapping && !preview.blocksImport && preview.errorRows > 0 ? (
                 <div className="rounded-[24px] border border-rose-400/18 bg-rose-300/[0.07] p-4 sm:p-5">
                   <div className="flex flex-col gap-3">
                     <p className="text-sm font-medium text-rose-50/95">
@@ -1139,7 +1191,7 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              {!needsFocusedMapping && preview.duplicateRows > 0 ? (
+              {!needsFocusedMapping && !preview.blocksImport && preview.duplicateRows > 0 ? (
                 <div className="rounded-[24px] border border-amber-400/20 bg-amber-300/[0.08] p-4 sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
@@ -1177,7 +1229,7 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              {!needsFocusedMapping ? (
+              {!needsFocusedMapping && !preview.blocksImport ? (
                 <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
                   <div
                     ref={readyToContinueRef}
