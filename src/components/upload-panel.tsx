@@ -299,6 +299,14 @@ export function UploadPanel({
     );
   }, [currentManualMapping]);
 
+  const shouldShowManualMapping = useMemo(() => {
+    if (!preview?.manualMapping || !currentManualMapping) {
+      return false;
+    }
+
+    return preview.requiresManualMapping || needsFocusedMapping;
+  }, [currentManualMapping, needsFocusedMapping, preview]);
+
   function resetSelection(nextFile: File | null) {
     setSelectedFile(nextFile);
     setPreview(null);
@@ -835,7 +843,7 @@ export function UploadPanel({
                 </div>
               </div>
 
-              {preview.manualMapping && currentManualMapping ? (
+              {shouldShowManualMapping ? (
                 <div
                   ref={mappingRef}
                   className={`rounded-[28px] border p-5 sm:p-6 ${
@@ -885,7 +893,7 @@ export function UploadPanel({
                           )}
                         </span>
                         <select
-                          value={currentManualMapping[field] ?? ""}
+                          value={currentManualMapping?.[field] ?? ""}
                           onChange={(event) => updateManualField(field, event.target.value)}
                           className="w-full rounded-[18px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm text-[var(--workspace-text)] outline-none transition focus:border-[var(--workspace-accent)]"
                         >
