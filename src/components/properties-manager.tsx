@@ -667,21 +667,50 @@ export function PropertiesManager({
                   : "This will delete the property and any saved units under it."}
             </div>
 
+            {propertyToDelete.importsCount > 0 ? (
+              <div className="rounded-[22px] border border-amber-400/18 bg-amber-300/[0.08] p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-amber-100">Imported something by mistake?</p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                      If the problem is the latest CSV or Excel file, undo that import first instead of deleting the whole property.
+                    </p>
+                    {propertyToDelete.lastImportFileName ? (
+                      <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                        Latest linked file:{" "}
+                        <span className="font-medium text-[var(--workspace-text)]">{propertyToDelete.lastImportFileName}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPropertyToDelete(null);
+                      router.push("/dashboard/imports");
+                    }}
+                    className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition"
+                  >
+                    Go to Import Center
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="workspace-soft-card grid gap-3 rounded-[22px] p-4 sm:grid-cols-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Imports</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
-                  {formatNumber(propertyToDelete.importsCount)}
+                  {formatNumber(propertyToDelete.importsCount)} file{propertyToDelete.importsCount === 1 ? "" : "s"}
                 </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Bookings</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
-                  {formatNumber(propertyToDelete.bookings)}
+                  {formatNumber(propertyToDelete.bookings)} row{propertyToDelete.bookings === 1 ? "" : "s"}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Expenses</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Linked spend</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
                   {formatCurrency(
                     propertyToDelete.expenses,
@@ -693,16 +722,14 @@ export function PropertiesManager({
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Units</p>
                 <p className="mt-1 text-sm text-[var(--workspace-text)]">
-                  {formatNumber(propertyToDelete.units.length)}
+                  {formatNumber(propertyToDelete.units.length)} saved
                 </p>
               </div>
             </div>
 
-            {propertyToDelete.lastImportFileName ? (
-              <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
-                Last linked workbook: <span className="font-medium text-[var(--workspace-text)]">{propertyToDelete.lastImportFileName}</span>
-              </div>
-            ) : null}
+            <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
+              Delete the property only when you really want to remove the whole reporting container with all linked data under it.
+            </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
