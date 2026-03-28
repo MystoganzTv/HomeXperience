@@ -14,9 +14,9 @@ export function MarketingFooter() {
       <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,23,39,0.66)_0%,rgba(8,17,28,0.5)_100%)] px-5 py-8 shadow-[0_18px_42px_rgba(3,8,16,0.14)] sm:px-7">
         <div className="flex flex-col gap-8 text-sm text-slate-400 lg:flex-row lg:items-end lg:justify-between">
           <div>
-          <BrandLogo href="/" compact />
+            <BrandLogo href="/" compact />
             <p className="mt-3 max-w-xl text-sm leading-7 text-slate-400">
-              Short-term rental finance software that replaces spreadsheet chaos with real financial clarity.
+              Hostlyx convierte datos dispersos en claridad financiera real para hosts de alquiler vacacional.
             </p>
           </div>
 

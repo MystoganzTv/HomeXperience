@@ -35,23 +35,23 @@ const problems = [
     icon: TrendingDown,
     title: "Ingresos ≠ beneficio",
     description:
-      "Un año con muchas reservas puede parecer bueno, pero sin gastos, comisiones e impuestos no sabes lo que realmente ganas.",
+      "Puedes tener reservas constantes y aun así no saber cuánto estás ganando realmente.",
     stat: "67%",
     statLabel: "de hosts sobrestiman su beneficio",
   },
   {
     icon: FileSpreadsheet,
-    title: "Datos dispersos por todos lados",
+    title: "Demasiados números, cero claridad",
     description:
-      "Extractos, facturas, Excel, notas y plataformas distintas terminan rompiendo tu historia financiera en demasiados sitios.",
+      "Excel, plataformas, gastos… todo está disperso y no conecta.",
     stat: "4+",
     statLabel: "herramientas para entender el negocio",
   },
   {
     icon: Eye,
-    title: "Cero visibilidad real",
+    title: "Decisiones sin datos reales",
     description:
-      "Sin ocupación, ADR, RevPAR, margen y cashflow claros, muchas decisiones se terminan tomando por intuición.",
+      "Sin saber tu beneficio real, estás operando a ciegas.",
     stat: "82%",
     statLabel: "sin métricas realmente accionables",
   },
@@ -60,33 +60,33 @@ const problems = [
 const features = [
   {
     icon: LayoutDashboard,
-    title: "Dashboard con claridad total",
-    description: "Todas tus métricas clave de un vistazo: ingresos, beneficio, gastos y márgenes.",
+    title: "Beneficio real",
+    description: "Ve exactamente cuánto dinero te queda después de todo.",
   },
   {
     icon: BarChart3,
-    title: "Rendimiento mensual",
-    description: "Visualiza cómo evoluciona tu negocio mes a mes con tendencias claras.",
+    title: "Gastos bajo control",
+    description: "Identifica qué está reduciendo tu rentabilidad.",
   },
   {
     icon: Tags,
-    title: "Categorización de gastos",
-    description: "Clasifica limpieza, mantenimiento, suministros, utilities y más sin perder el contexto.",
+    title: "Impuestos claros",
+    description: "Calcula cuánto debes apartar antes de que sea tarde.",
   },
   {
     icon: GitCompare,
-    title: "Ingresos por canal",
-    description: "Compara Airbnb, Booking y directo para ver qué canal aporta más valor real.",
+    title: "Rendimiento por propiedad",
+    description: "Descubre qué propiedades realmente generan dinero.",
   },
   {
     icon: PiggyBank,
-    title: "Beneficio real, no ilusión",
-    description: "Ingresos menos comisiones menos gastos: la cifra que importa, sin autoengaños.",
+    title: "Canales comparados",
+    description: "Airbnb, Booking o directo — cuál te deja más.",
   },
   {
     icon: ArrowDownUp,
-    title: "Control de cashflow",
-    description: "Entiende cuándo entra y sale el dinero para operar con más confianza.",
+    title: "Flujo de caja",
+    description: "Entiende cuándo entra y sale tu dinero.",
   },
 ];
 
@@ -157,12 +157,11 @@ export default async function LandingPage() {
               </div>
 
               <h1 className="mt-8 text-4xl font-bold leading-[1.05] tracking-tight text-slate-100 sm:text-5xl lg:text-6xl xl:text-7xl">
-                Conoce el <span className="text-[var(--accent)]">beneficio real</span> de tu alquiler vacacional.
+                ¿Cuánto te queda realmente de tu Airbnb?
               </h1>
 
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-300 sm:text-xl">
-                Deja de adivinar tus números. Hostlyx convierte reservas, gastos e ingresos dispersos en
-                claridad financiera total para que operes como negocio, no como improvisación.
+                Deja de mirar ingresos. Empieza a ver lo que realmente ganas después de gastos e impuestos.
               </p>
 
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -221,7 +220,7 @@ export default async function LandingPage() {
               El problema
             </span>
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl lg:text-5xl">
-              Los spreadsheets no fueron hechos para negocios de alquiler.
+              No es falta de ingresos. Es falta de claridad.
             </h2>
           </div>
 
@@ -258,11 +257,13 @@ export default async function LandingPage() {
                 La solución
               </span>
               <h2 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl lg:text-5xl">
-                Tu centro de mando financiero.
+                Lo único que importa: lo que realmente te quedas.
               </h2>
               <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-300">
-                Importa desde Airbnb, Booking o tu Excel actual. Hostlyx unifica todo en un solo lugar donde
-                cada número tiene sentido.
+                Hostlyx convierte tus ingresos, gastos e impuestos en una sola cifra clara: tu beneficio real.
+              </p>
+              <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-400">
+                Sin hojas de cálculo. Sin suposiciones. Sin autoengaños.
               </p>
             </div>
 
@@ -290,24 +291,22 @@ export default async function LandingPage() {
 
               <div className="absolute -left-4 top-1/3 hidden lg:block">
                 <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(17,28,44,0.96)_0%,rgba(11,22,37,0.96)_100%)] p-4 shadow-[0_20px_40px_rgba(2,6,23,0.24)]">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Beneficio neto</p>
-                  <p className="mt-1 text-2xl font-semibold text-[var(--accent)]">€9,654</p>
-                  <div className="mt-2 flex items-center gap-1">
-                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent-soft)]">
-                      <span className="text-[8px] text-[var(--accent)]">↑</span>
-                    </div>
-                    <span className="text-xs text-[var(--accent)]">+18%</span>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Resumen real</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    <p>Revenue: €18,142</p>
+                    <p>Expenses: €12,524</p>
+                    <p>Taxes: €823</p>
+                    <p className="font-semibold text-[var(--accent)]">You keep: €2,605</p>
                   </div>
                 </div>
               </div>
 
               <div className="absolute -right-4 top-1/4 hidden lg:block">
                 <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(17,28,44,0.96)_0%,rgba(11,22,37,0.96)_100%)] p-4 shadow-[0_20px_40px_rgba(2,6,23,0.24)]">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Ocupación</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-100">73.8%</p>
-                  <div className="mt-2 h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.08]">
-                    <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: "73.8%" }} />
-                  </div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">La cifra clave</p>
+                  <p className="mt-2 max-w-[11rem] text-base font-semibold leading-6 text-slate-100">
+                    Esto es lo que realmente te queda.
+                  </p>
                 </div>
               </div>
             </div>
@@ -317,7 +316,7 @@ export default async function LandingPage() {
                 href={dashboardHref}
                 className="brand-button inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-base font-semibold transition"
               >
-                Pruébalo gratis
+                Empieza gratis
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -330,7 +329,7 @@ export default async function LandingPage() {
               Funcionalidades
             </span>
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl lg:text-5xl">
-              Todo lo que necesitas para <span className="text-[var(--accent)]">rentabilizar tu alquiler.</span>
+              Todo lo que necesitas para entender tu negocio
             </h2>
           </div>
 
@@ -437,11 +436,10 @@ export default async function LandingPage() {
             <div className="relative px-8 py-16 text-center sm:px-16 sm:py-24">
               <h2 className="mx-auto max-w-3xl text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl lg:text-5xl">
                 Empieza con tus datos. <br />
-                <span className="text-[var(--accent)]">Quédate por la claridad.</span>
+                <span className="text-[var(--accent)]">Quédate con la claridad.</span>
               </h2>
               <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-slate-300">
-                Hostlyx reemplaza el caos de los spreadsheets con un verdadero centro de mando financiero para tu
-                negocio de alquiler vacacional.
+                Sube tu Excel y descubre en minutos cuánto estás ganando realmente.
               </p>
 
               <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -449,7 +447,7 @@ export default async function LandingPage() {
                   href={dashboardHref}
                   className="brand-button inline-flex items-center justify-center gap-2 rounded-2xl px-10 py-4 text-base font-semibold transition"
                 >
-                  Sube tus datos ahora
+                  Sube tus datos
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
