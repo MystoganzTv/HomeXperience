@@ -14,6 +14,10 @@ import type {
 export function normalizeManual(
   workbook: ParsedImportWorkbook,
   mapping: ImportManualMapping,
+  options?: {
+    source?: "airbnb" | "booking" | "generic" | "unknown";
+    channel?: string;
+  },
 ): ImportNormalizationResult {
   const sheet = workbook.sheets.find((entry) => entry.name === mapping.sheetName);
 
@@ -43,11 +47,11 @@ export function normalizeManual(
           : { value: grossMoney.value, malformed: false, currency: grossMoney.currency };
 
       const booking: NormalizedImportBooking = {
-        source: "unknown",
+        source: options?.source ?? "unknown",
         propertyName: String(getCell(row, mapping.propertyName ?? undefined) ?? "").trim(),
         bookingReference: "",
         guestName: String(getCell(row, mapping.guestName ?? undefined) ?? "").trim(),
-        channel: "Imported file",
+        channel: options?.channel ?? "Imported file",
         checkIn: checkInMeta.value,
         checkOut: checkOutMeta.value,
         nights: calculateNights(checkInMeta.value, checkOutMeta.value),
@@ -90,7 +94,7 @@ export function normalizeManual(
     });
 
   return {
-    source: "unknown",
+    source: options?.source ?? "unknown",
     bookings,
     expenses: [],
     warnings,

@@ -242,6 +242,7 @@ export function buildImportPreview(
   const workbook = parseWorkbook(buffer, fileName);
   let source = detectSource(workbook);
   const manualMapping = buildManualMappingPreview(workbook, options?.manualMapping);
+  const shouldUseManualMapping = Boolean(options?.manualMapping && manualMapping?.requiredReady);
 
   if (source === "unknown" && !manualMapping?.requiredReady) {
     return {
@@ -286,7 +287,26 @@ export function buildImportPreview(
 
   try {
     normalized =
-      source === "airbnb"
+      shouldUseManualMapping
+        ? normalizeManual(workbook, {
+            sheetName: manualMapping?.sheetName ?? workbook.sheets[0]?.name ?? "",
+            headerRowIndex: manualMapping?.headerRowIndex ?? 0,
+            guestName: manualMapping?.selected.guestName ?? null,
+            checkIn: manualMapping?.selected.checkIn ?? null,
+            checkOut: manualMapping?.selected.checkOut ?? null,
+            grossRevenue: manualMapping?.selected.grossRevenue ?? null,
+            payout: manualMapping?.selected.payout ?? null,
+            propertyName: manualMapping?.selected.propertyName ?? null,
+          }, {
+            source,
+            channel:
+              source === "airbnb"
+                ? "Airbnb"
+                : source === "booking"
+                  ? "Booking.com"
+                  : "Imported file",
+          })
+        : source === "airbnb"
         ? normalizeAirbnb(workbook)
         : source === "booking"
           ? normalizeBooking(workbook)

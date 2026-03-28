@@ -45,11 +45,11 @@ export function Modal({
         <button
           type="button"
           aria-label="Close modal"
-          className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+          className="absolute inset-0 bg-slate-950/78"
           onClick={onClose}
         />
       ) : (
-        <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-slate-950/78" />
       )}
       <div
         ref={modalCardRef}

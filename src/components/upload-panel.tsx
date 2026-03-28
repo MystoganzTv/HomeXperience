@@ -597,7 +597,6 @@ export function UploadPanel({
       ) : null}
 
       <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7">
-        <div className="absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top,rgba(125,211,197,0.12),transparent_60%)]" />
         <div className="relative">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
@@ -863,7 +862,11 @@ export function UploadPanel({
                       <label key={field} className="space-y-2">
                         <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
                           {label}
-                          {required ? " *" : " (optional)"}
+                          {required ? (
+                            <span className="ml-1 text-[var(--workspace-accent)]">*</span>
+                          ) : (
+                            <span className="ml-1 text-[10px] text-[var(--workspace-muted)]/80">(optional)</span>
+                          )}
                         </span>
                         <select
                           value={currentManualMapping[field] ?? ""}
