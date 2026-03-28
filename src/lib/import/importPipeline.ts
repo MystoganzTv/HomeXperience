@@ -100,7 +100,7 @@ function categorizeBookingCandidate(candidate: ImportBookingCandidate): ImportRe
     return "errors";
   }
 
-  if (candidate.calendarMatch?.matchType === "blocked_conflict") {
+  if (candidate.calendarMatch?.isConflict) {
     return "conflicts";
   }
 
@@ -653,7 +653,7 @@ export function buildImportPreview(
     ...candidate,
     duplicate: duplicatesByRowIndex.get(candidate.rowIndex),
     rowStatus:
-      candidate.calendarMatch?.matchType === "blocked_conflict"
+      candidate.calendarMatch?.isConflict
         ? "conflict"
         : duplicatesByRowIndex.has(candidate.rowIndex)
           ? "duplicate"

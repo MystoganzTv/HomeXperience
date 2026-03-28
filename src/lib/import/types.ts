@@ -32,7 +32,9 @@ export type ImportDuplicateFlag = {
 
 export type ImportCalendarMatch = {
   rowIndex: number;
-  matchType: "exact" | "probable" | "blocked_conflict";
+  matchType: "exact" | "probable" | "weak" | "none" | "conflict";
+  score: number;
+  isConflict: boolean;
   calendarEventId: number;
   summary: string;
   eventType: "booking" | "blocked" | "unknown";
