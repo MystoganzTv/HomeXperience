@@ -18,7 +18,7 @@ export function getBookingStatusState(
   const rawStatus = normalizeStatus(booking.overbookingStatus);
 
   if (rawStatus.includes("cancel")) {
-    return { label: "Cancelled", tone: "danger" };
+    return { label: "Canceled", tone: "danger" };
   }
 
   if (rawStatus.includes("no show") || rawStatus.includes("noshow")) {
