@@ -214,6 +214,8 @@ export function UploadPanel({
   const sourceDetectedRef = useRef<HTMLDivElement | null>(null);
   const mappingRef = useRef<HTMLDivElement | null>(null);
   const reviewRef = useRef<HTMLDetailsElement | null>(null);
+  const readyToContinueRef = useRef<HTMLDivElement | null>(null);
+  const importButtonRef = useRef<HTMLButtonElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [phase, setPhase] = useState<UploadPhase>("idle");
@@ -223,6 +225,7 @@ export function UploadPanel({
   const [toast, setToast] = useState<UploadToast | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [committed, setCommitted] = useState<ImportCommittedPayload | null>(null);
+  const [shouldFocusImportAction, setShouldFocusImportAction] = useState(false);
 
   const actionableRows = useMemo(() => {
     if (!preview) {
@@ -370,6 +373,7 @@ export function UploadPanel({
       );
       setDuplicateStrategy("skip");
       setPhase("ready");
+      setShouldFocusImportAction(true);
     } catch (error) {
       setPhase("idle");
       setToast({
@@ -531,6 +535,32 @@ export function UploadPanel({
 
     return () => window.clearTimeout(timer);
   }, [needsFocusedMapping, preview, toast]);
+
+  useEffect(() => {
+    if (!shouldFocusImportAction) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (needsFocusedMapping) {
+        scrollToMapping();
+        setShouldFocusImportAction(false);
+        return;
+      }
+
+      if (actionableRows > 0) {
+        readyToContinueRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+        importButtonRef.current?.focus({ preventScroll: true });
+      }
+
+      setShouldFocusImportAction(false);
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [actionableRows, needsFocusedMapping, shouldFocusImportAction]);
 
   if (committed) {
     return (
@@ -1070,7 +1100,10 @@ export function UploadPanel({
 
               {!needsFocusedMapping ? (
                 <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-                  <div className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5">
+                  <div
+                    ref={readyToContinueRef}
+                    className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5"
+                  >
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
                       Preview
@@ -1190,6 +1223,7 @@ export function UploadPanel({
 
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                       <button
+                        ref={importButtonRef}
                         type="button"
                         onClick={handleImport}
                         disabled={actionableRows <= 0 || phase === "importing" || phase === "previewing"}
