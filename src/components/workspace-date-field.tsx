@@ -85,7 +85,6 @@ export function WorkspaceDateField({
   const [visibleMonth, setVisibleMonth] = useState(startOfMonth(initialMonth));
   const [isOpen, setIsOpen] = useState(false);
   const [activePicker, setActivePicker] = useState<"month" | "year" | null>(null);
-  const [pendingValue, setPendingValue] = useState(currentValue);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -114,14 +113,7 @@ export function WorkspaceDateField({
     };
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setPendingValue(currentValue);
-    }
-  }, [currentValue, isOpen]);
-
   const selectedDate = currentValue ? parseISO(currentValue) : null;
-  const pendingDate = pendingValue ? parseISO(pendingValue) : null;
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -140,27 +132,22 @@ export function WorkspaceDateField({
 
   function chooseDate(nextDate: Date) {
     const nextValue = format(nextDate, "yyyy-MM-dd");
-    setPendingValue(nextValue);
+    if (value !== undefined) {
+      onChange?.(nextValue);
+    } else {
+      setInternalValue(nextValue);
+    }
     setVisibleMonth(startOfMonth(nextDate));
     setActivePicker(null);
+    setIsOpen(false);
   }
 
   function clearDate() {
-    setPendingValue("");
-    setActivePicker(null);
-  }
-
-  function applyDate() {
     if (value !== undefined) {
-      onChange?.(pendingValue);
+      onChange?.("");
     } else {
-      setInternalValue(pendingValue);
+      setInternalValue("");
     }
-
-    if (pendingValue) {
-      setVisibleMonth(startOfMonth(parseISO(pendingValue)));
-    }
-
     setActivePicker(null);
     setIsOpen(false);
   }
@@ -181,9 +168,7 @@ export function WorkspaceDateField({
             const nextOpen = !current;
 
             if (nextOpen) {
-              const nextValue = currentValue;
-              setPendingValue(nextValue);
-              setVisibleMonth(startOfMonth(nextValue ? parseISO(nextValue) : new Date()));
+              setVisibleMonth(startOfMonth(currentValue ? parseISO(currentValue) : new Date()));
             }
 
             if (!nextOpen) {
@@ -319,7 +304,7 @@ export function WorkspaceDateField({
 
               <div className="mt-3 grid grid-cols-7 gap-2">
                 {calendarDays.map((day) => {
-                  const selected = pendingDate ? isSameDay(day, pendingDate) : false;
+                  const selected = selectedDate ? isSameDay(day, selectedDate) : false;
                   const currentMonth = isSameMonth(day, visibleMonth);
                   const today = isToday(day);
 
@@ -358,13 +343,6 @@ export function WorkspaceDateField({
               className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-white/[0.08]"
             >
               Today
-            </button>
-            <button
-              type="button"
-              onClick={applyDate}
-              className="rounded-full bg-[var(--workspace-accent-soft)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-text)] transition hover:bg-[var(--workspace-accent-soft-strong)]"
-            >
-              OK
             </button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { Funnel } from "lucide-react";
 import { WorkspaceDateField } from "@/components/workspace-date-field";
 import { WorkspaceSelect } from "@/components/workspace-select";
@@ -75,6 +75,19 @@ export function FilterBar(props: FilterBarProps) {
   const calendarProps =
     mode === "calendar" ? (props as Extract<FilterBarProps, { mode: "calendar" }>) : null;
   const embedded = props.embedded ?? false;
+  const [draftStartDate, setDraftStartDate] = useState(rangeProps?.selectedStartDate ?? "");
+  const [draftEndDate, setDraftEndDate] = useState(rangeProps?.selectedEndDate ?? "");
+
+  useEffect(() => {
+    if (!rangeProps || rangeProps.selectedRangePreset !== "custom") {
+      setDraftStartDate("");
+      setDraftEndDate("");
+      return;
+    }
+
+    setDraftStartDate(rangeProps.selectedStartDate);
+    setDraftEndDate(rangeProps.selectedEndDate);
+  }, [rangeProps]);
 
   useEffect(() => {
     const hasExplicitFilters =
@@ -189,6 +202,46 @@ export function FilterBar(props: FilterBarProps) {
     replaceParams(params);
   }
 
+  function updateCustomRange(startValue: string, endValue: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("year");
+    params.delete("month");
+    params.set("range", "custom");
+
+    if (startValue) {
+      params.set("start", startValue);
+    } else {
+      params.delete("start");
+    }
+
+    if (endValue) {
+      params.set("end", endValue);
+    } else {
+      params.delete("end");
+    }
+
+    persistRangeFilters(params);
+    replaceParams(params);
+  }
+
+  function updateCustomDateField(key: "start" | "end", value: string) {
+    if (key === "start") {
+      setDraftStartDate(value);
+
+      if (value && draftEndDate) {
+        updateCustomRange(value, draftEndDate);
+      }
+
+      return;
+    }
+
+    setDraftEndDate(value);
+
+    if (draftStartDate && value) {
+      updateCustomRange(draftStartDate, value);
+    }
+  }
+
   function updateCalendarFilter(key: "year" | "month" | "channel" | "country", value: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("range");
@@ -271,8 +324,8 @@ export function FilterBar(props: FilterBarProps) {
               <WorkspaceDateField
                 name="start"
                 label="Start date"
-                value={rangeProps.selectedStartDate}
-                onChange={(value) => updateRangeFilter("start", value)}
+                value={draftStartDate}
+                onChange={(value) => updateCustomDateField("start", value)}
                 placeholder="Start date"
                 compact
                 hideLabel
@@ -281,8 +334,8 @@ export function FilterBar(props: FilterBarProps) {
               <WorkspaceDateField
                 name="end"
                 label="End date"
-                value={rangeProps.selectedEndDate}
-                onChange={(value) => updateRangeFilter("end", value)}
+                value={draftEndDate}
+                onChange={(value) => updateCustomDateField("end", value)}
                 placeholder="End date"
                 compact
                 hideLabel
