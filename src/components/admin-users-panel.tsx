@@ -182,12 +182,17 @@ export function AdminUsersPanel({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
                     Access control
                   </p>
+                  {user.isAdmin ? (
+                    <p className="mt-3 text-sm leading-6 text-[var(--workspace-muted)]">
+                      Your admin workspace can still move between Starter, Pro, and Portfolio here. Only revoke and delete stay locked.
+                    </p>
+                  ) : null}
                   <div className="mt-4 grid grid-cols-3 gap-2">
                     {paidPlans.map((plan) => (
                       <button
                         key={plan}
                         type="button"
-                        disabled={rowBusy || user.isAdmin}
+                        disabled={rowBusy}
                         onClick={() => runAction(`${user.ownerEmail}-${plan}`, () => updatePlan(user.ownerEmail, plan))}
                         className={`rounded-2xl px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                           user.subscription.status === "active" && user.subscription.plan === plan
