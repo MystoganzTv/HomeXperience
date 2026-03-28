@@ -105,6 +105,7 @@ export default async function ReportsPage({
             <FilterBar
               channels={view.availableChannels}
               countries={view.availableCountries}
+              rangeShortcutYears={view.availableYears}
               selectedRangePreset={view.filters.rangePreset}
               selectedStartDate={view.filters.startDate}
               selectedEndDate={view.filters.endDate}

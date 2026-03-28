@@ -43,6 +43,7 @@ type FilterBarProps = {
   selectedCountryCode: CountryCode | "all";
   showChannelSelect?: boolean;
   embedded?: boolean;
+  rangeShortcutYears?: number[];
 } & (
   | {
       mode?: "range";
@@ -202,6 +203,21 @@ export function FilterBar(props: FilterBarProps) {
     replaceParams(params);
   }
 
+  function applyFullYearShortcut(year: number) {
+    const start = `${year}-01-01`;
+    const end = `${year}-12-31`;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("year");
+    params.delete("month");
+    params.set("range", "custom");
+    params.set("start", start);
+    params.set("end", end);
+    setDraftStartDate(start);
+    setDraftEndDate(end);
+    persistRangeFilters(params);
+    replaceParams(params);
+  }
+
   function updateCustomRange(startValue: string, endValue: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("year");
@@ -312,6 +328,29 @@ export function FilterBar(props: FilterBarProps) {
 
       {rangeProps ? (
         <>
+          {props.rangeShortcutYears && props.rangeShortcutYears.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {props.rangeShortcutYears.map((year) => {
+                const isActiveFullYear =
+                  rangeProps.selectedRangePreset === "custom" &&
+                  rangeProps.selectedStartDate === `${year}-01-01` &&
+                  rangeProps.selectedEndDate === `${year}-12-31`;
+
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    onClick={() => applyFullYearShortcut(year)}
+                    className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      isActiveFullYear ? "workspace-button-primary" : "workspace-button-secondary"
+                    }`}
+                  >
+                    {year}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <WorkspaceSelect
             compact
             className="min-w-[170px]"

@@ -90,6 +90,7 @@ export default async function ExpensesPage({
           <FilterBar
             channels={view.availableChannels}
             countries={view.availableCountries}
+            rangeShortcutYears={view.availableYears}
             selectedRangePreset={view.filters.rangePreset}
             selectedStartDate={view.filters.startDate}
             selectedEndDate={view.filters.endDate}
