@@ -30,11 +30,13 @@ const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function buildCalendarDays(anchor: Date) {
   const monthStart = startOfMonth(anchor);
+  const monthEnd = endOfMonth(anchor);
   const startOffset = getDay(monthStart);
   const gridStart = new Date(monthStart);
   gridStart.setDate(monthStart.getDate() - startOffset);
-  const gridEnd = new Date(gridStart);
-  gridEnd.setDate(gridStart.getDate() + 41);
+  const endOffset = 6 - getDay(monthEnd);
+  const gridEnd = new Date(monthEnd);
+  gridEnd.setDate(monthEnd.getDate() + endOffset);
 
   return eachDayOfInterval({ start: gridStart, end: gridEnd });
 }
