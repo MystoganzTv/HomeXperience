@@ -332,16 +332,21 @@ export function UploadPanel({
       return 0;
     }
 
-    if (preview.source === "financial_statement") {
-      return preview.canImport && preview.financialStatement ? 1 : 0;
-    }
-
     return (
       preview.validRows +
       preview.warningRows +
       (duplicateStrategy === "import" ? preview.duplicateRows : 0)
     );
   }, [duplicateStrategy, preview]);
+
+  const isFinancialPreview = preview?.source === "financial_statement";
+  const isFinancialStatementReady = Boolean(
+    preview &&
+      preview.source === "financial_statement" &&
+      !preview.blocksImport &&
+      preview.financialStatement &&
+      preview.canImport,
+  );
 
   const importButtonLabel = useMemo(() => {
     if (phase === "importing") {
@@ -352,7 +357,7 @@ export function UploadPanel({
       return "Import data";
     }
 
-    if (preview.source === "financial_statement") {
+    if (isFinancialStatementReady) {
       return "Save financial statement";
     }
 
@@ -365,7 +370,7 @@ export function UploadPanel({
     }
 
     return "Map columns manually";
-  }, [actionableRows, phase, preview]);
+  }, [actionableRows, isFinancialStatementReady, phase, preview]);
 
   const reviewItems = useMemo(() => {
     if (!preview) {
@@ -376,7 +381,7 @@ export function UploadPanel({
       return [];
     }
 
-    if (preview.source === "financial_statement") {
+    if (isFinancialPreview) {
       return [];
     }
 
@@ -386,7 +391,7 @@ export function UploadPanel({
       ...preview.reviewRows.duplicates,
       ...preview.reviewRows.warnings,
     ].slice(0, 8);
-  }, [preview]);
+  }, [isFinancialPreview, preview]);
 
   const needsFocusedMapping = useMemo(() => {
     if (!preview?.manualMapping) {
@@ -1232,21 +1237,19 @@ export function UploadPanel({
                               : "Use a reservations or earnings export instead"}
                           </span>
                         </div>
-                      ) : preview.source === "financial_statement" ? (
+                      ) : isFinancialStatementReady ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <span className="rounded-full border border-[var(--workspace-accent)]/24 bg-[rgba(125,211,197,0.12)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-accent)]">
-                            Import as financial statement
+                            Financial statement ready
                           </span>
-                          {preview.canImport ? (
-                            <button
-                              type="button"
-                              onClick={handleImport}
-                              disabled={phase === "importing" || phase === "previewing"}
-                              className="workspace-button-primary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {phase === "importing" ? "Saving statement..." : "Save financial statement"}
-                            </button>
-                          ) : null}
+                          <button
+                            type="button"
+                            onClick={handleImport}
+                            disabled={phase === "importing" || phase === "previewing"}
+                            className="workspace-button-primary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {phase === "importing" ? "Saving statement..." : "Save financial statement"}
+                          </button>
                         </div>
                       ) : needsFocusedMapping ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1277,8 +1280,10 @@ export function UploadPanel({
                   >
                     {preview.blocksImport
                       ? "Wrong file type"
-                      : preview.source === "financial_statement"
+                      : isFinancialStatementReady
                       ? "Statement ready"
+                      : preview.source === "financial_statement"
+                      ? "Needs payout total"
                       : preview.requiresManualMapping
                       ? "Manual mapping"
                       : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
@@ -1409,7 +1414,113 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              {!needsFocusedMapping && !preview.blocksImport ? (
+              {isFinancialPreview && !preview.blocksImport && preview.financialStatement ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ["Statement source", preview.financialStatement.source === "airbnb" ? "Airbnb" : "Booking.com", "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                      ["Actual payout", formatCurrency(preview.financialStatement.totalPayout), "text-teal-100", "border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.08)]"],
+                      ["Fees detected", formatCurrency(preview.financialStatement.totalFees), "text-amber-100", "border-amber-400/20 bg-amber-300/[0.08]"],
+                      ["Taxes detected", formatCurrency(preview.financialStatement.totalTaxes), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                    ].map(([label, value, tone, surface]) => (
+                      <div
+                        key={String(label)}
+                        className={`rounded-[22px] border px-4 py-5 ${surface}`}
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                          {label}
+                        </p>
+                        <p className={`mt-3 text-3xl font-semibold ${tone}`}>
+                          {value}
+                        </p>
+                        {label === "Statement source" ? (
+                          <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                            {preview.financialStatement?.period.label}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                    <div className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                        Statement summary
+                      </p>
+                      <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                        {preview.financialStatement.period.label}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                        Hostlyx will save this document as a financial statement, separate from bookings, and use it for Reconcile.
+                      </p>
+
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            What gets saved
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-text)]">
+                            Actual payout, fees, taxes, source, currency, and statement period.
+                          </p>
+                        </div>
+                        <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                            What will not happen
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-text)]">
+                            Hostlyx will not create bookings from this file or mix it into operational calendar events.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      ref={readyToContinueRef}
+                      className="rounded-[24px] border border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.07)] p-5"
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                        Ready to continue
+                      </p>
+                      <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                        1 financial statement ready to import
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                        Nothing will be saved until you confirm this financial statement import.
+                      </p>
+
+                      <div className="mt-5 rounded-[18px] border border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.08)] px-4 py-4 text-sm text-[var(--workspace-text)]">
+                        This file will feed Reconcile so you can compare expected payout against what Airbnb or Booking.com actually paid out.
+                      </div>
+
+                      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                        <button
+                          ref={importButtonRef}
+                          type="button"
+                          onClick={handleImport}
+                          disabled={!isFinancialStatementReady || phase === "importing" || phase === "previewing"}
+                          className="workspace-button-primary inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {phase === "importing" ? (
+                            <>
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                              Save financial statement
+                            </>
+                          ) : (
+                            "Save financial statement"
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancel}
+                          className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : !needsFocusedMapping && !preview.blocksImport ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {(preview.financialStatement
                     ? [
