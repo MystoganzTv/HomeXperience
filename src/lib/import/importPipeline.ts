@@ -120,12 +120,12 @@ function getLikelyHeaderRow(workbook: ReturnType<typeof parseWorkbook>) {
 
 function suggestMappedColumn(headers: string[], field: ImportManualMappingField) {
   const aliases: Record<ImportManualMappingField, string[]> = {
-    guestName: ["guest", "name", "booker", "customer"],
-    checkIn: ["arrival", "checkin", "start", "from"],
-    checkOut: ["departure", "checkout", "end", "to"],
-    grossRevenue: ["revenue", "amount", "gross", "price", "total"],
-    payout: ["payout", "net", "earnings", "received"],
-    propertyName: ["property", "listing", "accommodation", "unit", "home"],
+    guestName: ["guest", "name", "booker", "customer", "huesped", "cliente"],
+    checkIn: ["arrival", "checkin", "start", "from", "fecha", "inicio", "entrada"],
+    checkOut: ["departure", "checkout", "end", "to", "finalizacion", "salida"],
+    grossRevenue: ["revenue", "amount", "gross", "price", "total", "ganancias", "importe", "ingreso"],
+    payout: ["payout", "net", "earnings", "received", "neto", "pago"],
+    propertyName: ["property", "listing", "accommodation", "unit", "home", "propiedad", "anuncio", "alojamiento"],
   };
 
   const normalizedHeaders = headers.map((header) => normalizeHeader(header));

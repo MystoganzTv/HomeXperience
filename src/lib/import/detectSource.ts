@@ -10,8 +10,12 @@ import {
 import type { ImportDetectedSource, ParsedImportWorkbook } from "./types";
 
 export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSource {
-  const hasNamedBookingsSheet = workbook.sheets.some((sheet) => sheet.normalizedName === "bookings");
-  const hasNamedExpensesSheet = workbook.sheets.some((sheet) => sheet.normalizedName === "expenses");
+  const hasNamedBookingsSheet = workbook.sheets.some((sheet) =>
+    ["bookings", "reservas"].includes(sheet.normalizedName),
+  );
+  const hasNamedExpensesSheet = workbook.sheets.some((sheet) =>
+    ["expenses", "gastos"].includes(sheet.normalizedName),
+  );
 
   for (const sheet of workbook.sheets) {
     for (let rowIndex = 0; rowIndex < Math.min(sheet.rows.length, 8); rowIndex += 1) {
@@ -20,7 +24,15 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
       const matches = Object.keys(indexes).length;
       const normalizedHeaders = row.map((cell) => normalizeHeader(cell));
       const hasAirbnbSpecificHeader = normalizedHeaders.some((header) =>
-        ["confirmationcode", "yourearnings", "hostservicefee", "listing"].includes(header),
+        [
+          "confirmationcode",
+          "yourearnings",
+          "hostservicefee",
+          "listing",
+          "codigodeconfirmacion",
+          "ganancias",
+          "anuncio",
+        ].includes(header),
       );
 
       if (
@@ -37,7 +49,16 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
       const bookingIndexes = mapOptionalColumns(row, bookingComBookingColumns);
       const bookingMatches = Object.keys(bookingIndexes).length;
       const hasBookingSpecificHeader = normalizedHeaders.some((header) =>
-        ["reservationnumber", "commission", "accommodation", "arrival", "departure"].includes(header),
+        [
+          "reservationnumber",
+          "commission",
+          "accommodation",
+          "arrival",
+          "departure",
+          "numerodereserva",
+          "comision",
+          "alojamiento",
+        ].includes(header),
       );
 
       if (
