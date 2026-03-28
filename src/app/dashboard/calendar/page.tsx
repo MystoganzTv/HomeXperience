@@ -129,7 +129,17 @@ export default async function CalendarPage({
     countryClosures,
     filters.year,
     filters.month,
-  );
+  ).filter((anchorDate) => {
+    if (filters.year !== "all" && anchorDate.getFullYear() !== filters.year) {
+      return false;
+    }
+
+    if (filters.month !== "all" && anchorDate.getMonth() !== filters.month - 1) {
+      return false;
+    }
+
+    return true;
+  });
 
   const displayCountryCode =
     filters.countryCode === "all" ? userSettings.primaryCountryCode : filters.countryCode;
