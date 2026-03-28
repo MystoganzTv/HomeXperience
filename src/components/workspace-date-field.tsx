@@ -7,6 +7,8 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getMonth,
+  getYear,
   isSameDay,
   isSameMonth,
   isToday,
@@ -16,6 +18,21 @@ import {
   subMonths,
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+
+const calendarMonthOptions = [
+  { value: 0, label: "January" },
+  { value: 1, label: "February" },
+  { value: 2, label: "March" },
+  { value: 3, label: "April" },
+  { value: 4, label: "May" },
+  { value: 5, label: "June" },
+  { value: 6, label: "July" },
+  { value: 7, label: "August" },
+  { value: 8, label: "September" },
+  { value: 9, label: "October" },
+  { value: 10, label: "November" },
+  { value: 11, label: "December" },
+];
 
 function buildCalendarDays(month: Date) {
   const calendarStart = startOfWeek(startOfMonth(month), { weekStartsOn: 0 });
@@ -97,6 +114,20 @@ export function WorkspaceDateField({
 
   const selectedDate = currentValue ? parseISO(currentValue) : null;
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const visibleYear = getYear(visibleMonth);
+    const selectedYear = selectedDate ? getYear(selectedDate) : visibleYear;
+    const startYear = Math.min(currentYear - 12, visibleYear - 8, selectedYear - 4);
+    const endYear = Math.max(currentYear + 3, visibleYear + 4, selectedYear + 2);
+    const years: number[] = [];
+
+    for (let year = endYear; year >= startYear; year -= 1) {
+      years.push(year);
+    }
+
+    return years;
+  }, [selectedDate, visibleMonth]);
 
   function chooseDate(nextDate: Date) {
     const nextValue = format(nextDate, "yyyy-MM-dd");
@@ -151,7 +182,42 @@ export function WorkspaceDateField({
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <p className="text-sm font-semibold text-white">{format(visibleMonth, "MMMM yyyy")}</p>
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Select month"
+                value={String(getMonth(visibleMonth))}
+                onChange={(event) => {
+                  const nextMonth = Number(event.target.value);
+                  setVisibleMonth(
+                    new Date(getYear(visibleMonth), nextMonth, 1),
+                  );
+                }}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:bg-white/[0.08] focus:border-[var(--workspace-accent)]/50"
+              >
+                {calendarMonthOptions.map((month) => (
+                  <option key={month.value} value={month.value} className="bg-slate-950 text-slate-100">
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Select year"
+                value={String(getYear(visibleMonth))}
+                onChange={(event) => {
+                  const nextYear = Number(event.target.value);
+                  setVisibleMonth(
+                    new Date(nextYear, getMonth(visibleMonth), 1),
+                  );
+                }}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:bg-white/[0.08] focus:border-[var(--workspace-accent)]/50"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year} className="bg-slate-950 text-slate-100">
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
