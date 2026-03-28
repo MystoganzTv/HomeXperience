@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -210,7 +210,10 @@ export function UploadPanel({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const sourceDetectedRef = useRef<HTMLDivElement | null>(null);
   const mappingRef = useRef<HTMLDivElement | null>(null);
+  const reviewRef = useRef<HTMLDetailsElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [phase, setPhase] = useState<UploadPhase>("idle");
@@ -377,7 +380,29 @@ export function UploadPanel({
   }
 
   async function handleImport() {
-    if (!selectedFile || !preview?.canImport || actionableRows <= 0) {
+    if (!selectedFile) {
+      setToast({
+        tone: "error",
+        message: "Choose a file first so Hostlyx can review it before importing.",
+      });
+      return;
+    }
+
+    if (!preview) {
+      setToast({
+        tone: "error",
+        message: "Preview the file first so you can review issues before importing.",
+      });
+      return;
+    }
+
+    if (!preview.canImport || actionableRows <= 0) {
+      setToast({
+        tone: "error",
+        message: needsFocusedMapping
+          ? "We need a quick column check before Hostlyx can continue."
+          : "This file needs attention before Hostlyx can import it.",
+      });
       return;
     }
 
@@ -479,6 +504,33 @@ export function UploadPanel({
       block: "center",
     });
   }
+
+  function scrollToAttentionTarget() {
+    const target =
+      (needsFocusedMapping ? mappingRef.current : null) ??
+      (preview && (preview.errorRows > 0 || preview.warningRows > 0 || preview.duplicateRows > 0)
+        ? reviewRef.current
+        : null) ??
+      sourceDetectedRef.current ??
+      panelRef.current;
+
+    target?.scrollIntoView({
+      behavior: "smooth",
+      block: target === panelRef.current ? "start" : "center",
+    });
+  }
+
+  useEffect(() => {
+    if (!toast || toast.tone !== "error") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      scrollToAttentionTarget();
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [needsFocusedMapping, preview, toast]);
 
   if (committed) {
     return (
@@ -620,7 +672,10 @@ export function UploadPanel({
         </div>
       ) : null}
 
-      <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7">
+      <div
+        ref={panelRef}
+        className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7"
+      >
         <div className="relative">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
@@ -790,7 +845,10 @@ export function UploadPanel({
 
           {preview ? (
             <div className="space-y-5">
-              <div className="workspace-soft-card rounded-[28px] border border-[var(--workspace-border)] p-5 sm:p-6">
+              <div
+                ref={sourceDetectedRef}
+                className="workspace-soft-card rounded-[28px] border border-[var(--workspace-border)] p-5 sm:p-6"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-[var(--workspace-border)] bg-white/[0.04]">
@@ -1059,6 +1117,7 @@ export function UploadPanel({
 
                 <div className="space-y-4">
                   <details
+                    ref={reviewRef}
                     open={preview.warningRows + preview.duplicateRows + preview.errorRows > 0}
                     className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5"
                   >
