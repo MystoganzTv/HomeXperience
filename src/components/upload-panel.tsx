@@ -143,6 +143,7 @@ type PreviewTableRow = {
   decisionReason: string;
   isSelectedByDefault: boolean;
   isDisabled: boolean;
+  autoFixesApplied: string[];
 };
 
 type ImportPreviewPayload = {
@@ -162,6 +163,8 @@ type ImportPreviewPayload = {
   newRows: number;
   errorRows: number;
   skippedRows: number;
+  autoFixedRows: number;
+  autoFixSummary: string[];
   expensesDetected: number;
   importableRows: number;
   financialStatement: null | {
@@ -1678,13 +1681,14 @@ export function UploadPanel({
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                       {[
                         ["New bookings", String(preview.newRows), "border-white/10 bg-white/[0.02] text-[var(--workspace-text)]"],
                         ["Matched to calendar", String(preview.matchedRows), "border-teal-400/18 bg-teal-300/[0.08] text-teal-100"],
                         ["Duplicates", String(preview.duplicateRows), "border-amber-400/18 bg-amber-300/[0.08] text-amber-100"],
                         ["Conflicts", String(preview.conflictRows), "border-rose-400/18 bg-rose-300/[0.08] text-rose-100"],
                         ["Warnings", String(preview.warningRows + preview.errorRows), "border-yellow-300/18 bg-yellow-300/[0.08] text-yellow-100"],
+                        ["Auto-fixed", String(preview.autoFixedRows), "border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.08)] text-teal-100"],
                       ].map(([label, value, classes]) => (
                         <div key={String(label)} className={`rounded-[20px] border px-4 py-4 ${classes}`}>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
@@ -1694,6 +1698,24 @@ export function UploadPanel({
                         </div>
                       ))}
                     </div>
+
+                    {preview.autoFixSummary.length > 0 ? (
+                      <details className="mt-5 rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                        <summary className="cursor-pointer list-none text-sm font-medium text-[var(--workspace-text)]">
+                          Auto-fixes applied
+                        </summary>
+                        <div className="mt-3 grid gap-2">
+                          {preview.autoFixSummary.map((item) => (
+                            <div
+                              key={item}
+                              className="rounded-[14px] border border-white/8 bg-white/[0.02] px-3 py-2 text-sm text-[var(--workspace-muted)]"
+                            >
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
@@ -1769,6 +1791,11 @@ export function UploadPanel({
                                         {getPreviewStatusLabel(row.status)}
                                       </span>
                                     </div>
+                                    {row.autoFixesApplied.length > 0 ? (
+                                      <p className="mt-2 text-[11px] text-teal-100/85">
+                                        {row.autoFixesApplied.length} auto-fix{row.autoFixesApplied.length === 1 ? "" : "es"}
+                                      </p>
+                                    ) : null}
                                   </td>
                                   <td className="py-4 pr-4 font-medium">{row.guestName}</td>
                                   <td className="py-4 pr-4 text-[var(--workspace-muted)]">{row.propertyName}</td>
@@ -1916,6 +1943,24 @@ export function UploadPanel({
                               )}
                             </div>
                           </div>
+
+                          {selectedTableRow.autoFixesApplied.length > 0 ? (
+                            <div className="rounded-[20px] border border-[var(--workspace-accent)]/16 bg-[rgba(125,211,197,0.06)] p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
+                                Auto-fixes applied
+                              </p>
+                              <div className="mt-3 space-y-2">
+                                {selectedTableRow.autoFixesApplied.map((fix) => (
+                                  <div
+                                    key={`${selectedTableRow.id}-${fix}`}
+                                    className="rounded-[14px] border border-[var(--workspace-accent)]/14 bg-[rgba(125,211,197,0.08)] px-3 py-2 text-sm text-teal-100"
+                                  >
+                                    {fix}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
 
                           <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.03] p-4">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">

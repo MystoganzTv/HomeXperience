@@ -76,6 +76,9 @@ export type NormalizedImportBooking = {
   currency: string;
   status: string;
   rawRow: RawImportRow;
+  autoFixesApplied: string[];
+  needsReview: boolean;
+  reviewReasons: string[];
 };
 
 export type NormalizedImportExpense = {
@@ -87,6 +90,9 @@ export type NormalizedImportExpense = {
   note: string;
   amount: number;
   rawRow: RawImportRow;
+  autoFixesApplied: string[];
+  needsReview: boolean;
+  reviewReasons: string[];
 };
 
 export type ImportBookingCandidate = {
@@ -134,6 +140,7 @@ export type ImportPreviewTableRow = {
   decisionReason: string;
   isSelectedByDefault: boolean;
   isDisabled: boolean;
+  autoFixesApplied: string[];
 };
 
 export type ImportEditableBooking = Pick<
@@ -237,6 +244,8 @@ export type ImportPreview = {
   newRows: number;
   errorRows: number;
   skippedRows: number;
+  autoFixedRows: number;
+  autoFixSummary: string[];
   expensesDetected: number;
   importableRows: number;
   bookings: ImportBookingCandidate[];

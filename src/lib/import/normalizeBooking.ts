@@ -1,4 +1,9 @@
 import {
+  applyReviewMetadata,
+  normalizeChannelLabel,
+  shouldNoteDateStandardization,
+} from "./autoFix";
+import {
   bookingComBookingColumns,
   getCell,
   mapOptionalColumns,
@@ -13,7 +18,7 @@ import {
   parseNights,
 } from "./dates";
 import { inferCurrency, parseMoney } from "./money";
-import { validateBookingRow } from "./validators";
+import { rowLooksLikeSeparator, rowLooksLikeSummary, validateBookingRow } from "./validators";
 import type {
   ImportBookingCandidate,
   ImportNormalizationResult,
@@ -66,12 +71,20 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
   );
   const warnings: ImportValidationWarning[] = [];
   const bookings: ImportBookingCandidate[] = [];
+  let skippedRows = 0;
 
   selectedSheet.rows
     .slice(selectedHeaderRowIndex + 1)
     .filter((row) => !rowIsEmpty(row))
     .forEach((row, index) => {
       const rowIndex = selectedHeaderRowIndex + index + 2;
+      const rawRow = toRawRow(headers, row);
+
+      if (rowLooksLikeSummary(rawRow) || rowLooksLikeSeparator(rawRow)) {
+        skippedRows += 1;
+        return;
+      }
+
       const grossMoney = parseMoney(getCell(row, selectedIndexes.grossRevenue));
       const payoutMoney = parseMoney(getCell(row, selectedIndexes.payout));
       const feeMoney = parseMoney(getCell(row, selectedIndexes.platformFee));
@@ -93,20 +106,41 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
         };
       }
 
+      const autoFixesApplied: string[] = [];
+      autoFixesApplied.push("Inferred channel from source");
       const grossRevenue = grossMoney.value > 0 ? grossMoney.value : Math.max(0, payoutMoney.value);
+      if (grossMoney.value <= 0 && grossRevenue > 0 && payoutMoney.value > 0) {
+        autoFixesApplied.push("Computed gross revenue from payout");
+      }
+
       const platformFee = Math.max(0, Math.abs(feeMoney.value));
       const payout =
         payoutMoney.value > 0
           ? payoutMoney.value
           : Math.max(0, grossRevenue - platformFee);
+      if (payoutMoney.value <= 0 && grossRevenue > 0) {
+        autoFixesApplied.push("Computed payout from revenue and platform fee");
+      }
+
       const nights = explicitNights || calculateNights(checkInMeta.value, checkOutMeta.value);
+      if (!explicitNights && nights > 0 && checkInMeta.value && checkOutMeta.value) {
+        autoFixesApplied.push("Calculated nights from dates");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, selectedIndexes.checkIn), checkInMeta.value, checkInMeta)) {
+        autoFixesApplied.push("Standardized check-in date");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, selectedIndexes.checkOut), checkOutMeta.value, checkOutMeta)) {
+        autoFixesApplied.push("Standardized check-out date");
+      }
 
       const booking: NormalizedImportBooking = {
         source: "booking",
         propertyName: String(getCell(row, selectedIndexes.propertyName) ?? "").trim(),
         bookingReference: String(getCell(row, selectedIndexes.bookingReference) ?? "").trim(),
         guestName: String(getCell(row, selectedIndexes.guestName) ?? "").trim(),
-        channel: "Booking.com",
+        channel: normalizeChannelLabel("Booking.com"),
         checkIn: checkInMeta.value,
         checkOut: checkOutMeta.value,
         nights,
@@ -125,7 +159,10 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
           taxMoney.currency,
         ),
         status: String(getCell(row, selectedIndexes.status) ?? "").trim() || "Booked",
-        rawRow: toRawRow(headers, row),
+        rawRow,
+        autoFixesApplied,
+        needsReview: false,
+        reviewReasons: [],
       };
 
       const rowWarnings = validateBookingRow({
@@ -153,7 +190,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
       warnings.push(...rowWarnings);
       bookings.push({
         rowIndex,
-        booking,
+        booking: applyReviewMetadata(booking, rowWarnings),
         warnings: rowWarnings,
       });
     });
@@ -164,7 +201,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
     expenses: [],
     warnings,
     duplicates: [],
-    skippedRows: 0,
+    skippedRows,
     totalRowsRead: selectedSheet.rows
       .slice(selectedHeaderRowIndex + 1)
       .filter((row) => !rowIsEmpty(row)).length,

@@ -1,4 +1,9 @@
 import {
+  applyReviewMetadata,
+  normalizeChannelLabel,
+  shouldNoteDateStandardization,
+} from "./autoFix";
+import {
   airbnbBookingColumns,
   getCell,
   mapOptionalColumns,
@@ -13,7 +18,7 @@ import {
   parseNights,
 } from "./dates";
 import { inferCurrency, parseMoney } from "./money";
-import { validateBookingRow } from "./validators";
+import { rowLooksLikeSeparator, rowLooksLikeSummary, validateBookingRow } from "./validators";
 import type {
   ImportBookingCandidate,
   ImportNormalizationResult,
@@ -65,12 +70,20 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
   );
   const warnings: ImportValidationWarning[] = [];
   const bookings: ImportBookingCandidate[] = [];
+  let skippedRows = 0;
 
   selectedSheet.rows
     .slice(selectedHeaderRowIndex + 1)
     .filter((row) => !rowIsEmpty(row))
     .forEach((row, index) => {
       const rowIndex = selectedHeaderRowIndex + index + 2;
+      const rawRow = toRawRow(headers, row);
+
+      if (rowLooksLikeSummary(rawRow) || rowLooksLikeSeparator(rawRow)) {
+        skippedRows += 1;
+        return;
+      }
+
       const grossMoney = parseMoney(getCell(row, selectedIndexes.grossRevenue));
       const payoutMoney = parseMoney(getCell(row, selectedIndexes.payout));
       const feeMoney = parseMoney(getCell(row, selectedIndexes.platformFee));
@@ -92,25 +105,52 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
         };
       }
 
+      const autoFixesApplied: string[] = [];
+      autoFixesApplied.push("Inferred channel from source");
       const nights = explicitNights || calculateNights(checkInMeta.value, checkOutMeta.value);
+      if (!explicitNights && nights > 0 && checkInMeta.value && checkOutMeta.value) {
+        autoFixesApplied.push("Calculated nights from dates");
+      }
+
+      const inferredGrossRevenue =
+        grossMoney.value > 0
+          ? grossMoney.value
+          : Math.max(0, payoutMoney.value + Math.abs(feeMoney.value));
+      if (grossMoney.value <= 0 && inferredGrossRevenue > 0 && payoutMoney.value > 0) {
+        autoFixesApplied.push("Computed gross revenue from payout and platform fee");
+      }
+
+      const inferredPayout =
+        payoutMoney.value > 0
+          ? payoutMoney.value
+          : Math.max(0, inferredGrossRevenue - Math.abs(feeMoney.value));
+      if (payoutMoney.value <= 0 && inferredGrossRevenue > 0) {
+        autoFixesApplied.push("Computed payout from revenue and platform fee");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, selectedIndexes.checkIn), checkInMeta.value, checkInMeta)) {
+        autoFixesApplied.push("Standardized check-in date");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, selectedIndexes.checkOut), checkOutMeta.value, checkOutMeta)) {
+        autoFixesApplied.push("Standardized check-out date");
+      }
+
       const booking: NormalizedImportBooking = {
         source: "airbnb",
         propertyName: String(getCell(row, selectedIndexes.propertyName) ?? "").trim(),
         bookingReference: String(getCell(row, selectedIndexes.bookingReference) ?? "").trim(),
         guestName: String(getCell(row, selectedIndexes.guestName) ?? "").trim(),
-        channel: "Airbnb",
+        channel: normalizeChannelLabel("Airbnb"),
         checkIn: checkInMeta.value,
         checkOut: checkOutMeta.value,
         nights,
         guests: Number(String(getCell(row, selectedIndexes.guests) ?? "").replace(/[^\d]/g, "")) || 0,
-        grossRevenue:
-          grossMoney.value > 0
-            ? grossMoney.value
-            : Math.max(0, payoutMoney.value + Math.abs(feeMoney.value)),
+        grossRevenue: inferredGrossRevenue,
         platformFee: Math.max(0, Math.abs(feeMoney.value)),
         cleaningFee: Math.max(0, cleaningMoney.value),
         taxAmount: Math.max(0, Math.abs(taxMoney.value)),
-        payout: payoutMoney.value,
+        payout: inferredPayout,
         currency: inferCurrency(
           String(getCell(row, selectedIndexes.currency) ?? "").trim(),
           grossMoney.currency,
@@ -120,7 +160,10 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
           taxMoney.currency,
         ),
         status: String(getCell(row, selectedIndexes.status) ?? "").trim() || "Booked",
-        rawRow: toRawRow(headers, row),
+        rawRow,
+        autoFixesApplied,
+        needsReview: false,
+        reviewReasons: [],
       };
 
       const rowWarnings = validateBookingRow({
@@ -148,7 +191,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
       warnings.push(...rowWarnings);
       bookings.push({
         rowIndex,
-        booking,
+        booking: applyReviewMetadata(booking, rowWarnings),
         warnings: rowWarnings,
       });
     });
@@ -159,7 +202,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
     expenses: [],
     warnings,
     duplicates: [],
-    skippedRows: 0,
+    skippedRows,
     totalRowsRead: selectedSheet.rows
       .slice(selectedHeaderRowIndex + 1)
       .filter((row) => !rowIsEmpty(row)).length,

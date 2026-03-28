@@ -4,6 +4,7 @@ import type {
   ExpenseRecord,
   ImportedFileSource,
 } from "@/lib/types";
+import { summarizeAutoFixes } from "./autoFix";
 import { matchBookingsToCalendar } from "./calendarMatch";
 import { detectDuplicateBookings } from "./dedupe";
 import { detectSource } from "./detectSource";
@@ -220,8 +221,9 @@ function describeBookingCandidate(
         ? [row.duplicate.message, ...row.warnings.map((warning) => warning.message)]
         : section === "conflicts" && matchReason
           ? [matchReason, ...row.warnings.map((warning) => warning.message)]
-          : [
+        : [
               ...(matchReason && section === "warnings" ? [matchReason] : []),
+              ...row.booking.autoFixesApplied,
               ...row.warnings.map((warning) => warning.message),
             ],
     canResolve: section !== "valid",
@@ -257,20 +259,20 @@ function describeExpenseCandidate(
     section,
     title: row.expense.category || "Expense row",
     subtitle: `${row.expense.date || "—"} • ${row.expense.description || row.expense.note || "Expense"}`,
-    reasons: row.warnings.map((warning) => warning.message),
+    reasons: [...row.expense.autoFixesApplied, ...row.warnings.map((warning) => warning.message)],
   };
 }
 
 function getTableRowStatus(candidate: ImportBookingCandidate): ImportPreviewTableRow["status"] {
-  if (hasBlockingIssues(candidate.warnings)) {
+  if (candidate.decision?.status === "blocked") {
     return "warning";
   }
 
-  if (candidate.calendarMatch?.isConflict) {
+  if (candidate.decision?.status === "needs-review" && candidate.calendarMatch?.isConflict) {
     return "conflict";
   }
 
-  if (candidate.duplicate) {
+  if (candidate.decision?.isDuplicate) {
     return "duplicate";
   }
 
@@ -278,7 +280,7 @@ function getTableRowStatus(candidate: ImportBookingCandidate): ImportPreviewTabl
     return "matched";
   }
 
-  if (candidate.warnings.length > 0) {
+  if (candidate.decision?.status === "needs-review" || candidate.warnings.length > 0) {
     return "warning";
   }
 
@@ -641,7 +643,11 @@ function applyBookingOverride(
 
   return {
     ...candidate,
-    booking,
+    booking: {
+      ...booking,
+      needsReview: warnings.length > 0,
+      reviewReasons: warnings.map((warning) => warning.message),
+    },
     warnings,
   };
 }
@@ -686,6 +692,8 @@ export function buildImportPreview(
       newRows: 0,
       errorRows: 0,
       skippedRows: 0,
+      autoFixedRows: 0,
+      autoFixSummary: [],
       expensesDetected: 0,
       importableRows: statement ? 1 : 0,
       bookings: [],
@@ -733,6 +741,8 @@ export function buildImportPreview(
       newRows: 0,
       errorRows: 0,
       skippedRows: 0,
+      autoFixedRows: 0,
+      autoFixSummary: [],
       expensesDetected: 0,
       importableRows: 0,
       bookings: [],
@@ -905,6 +915,13 @@ export function buildImportPreview(
   const importableRows = validRows + warningRows + duplicateRows;
   const matchedRows = bookingRows.filter((row) => row.rowStatus === "matched").length;
   const newRows = bookingRows.filter((row) => row.rowStatus === "new").length;
+  const autoFixedRows =
+    bookingRows.filter((row) => row.booking.autoFixesApplied.length > 0).length +
+    normalized.expenses.filter((row) => row.expense.autoFixesApplied.length > 0).length;
+  const autoFixSummary = summarizeAutoFixes(
+    bookingRows.map((row) => row.booking),
+    normalized.expenses.map((row) => row.expense),
+  );
   const tableRows: ImportPreviewTableRow[] = bookingRows.map((row) => ({
     id: `booking-${row.rowIndex}`,
     rowIndex: row.rowIndex,
@@ -944,6 +961,7 @@ export function buildImportPreview(
     decisionReason: row.decision?.reason ?? "This row needs review before import.",
     isSelectedByDefault: row.decision?.status === "auto-approved",
     isDisabled: row.decision?.status === "blocked",
+    autoFixesApplied: row.booking.autoFixesApplied,
   }));
 
   return {
@@ -963,6 +981,8 @@ export function buildImportPreview(
     newRows,
     errorRows,
     skippedRows: normalized.skippedRows,
+    autoFixedRows,
+    autoFixSummary,
     expensesDetected: normalized.expenses.length,
     importableRows,
     bookings: bookingRows,

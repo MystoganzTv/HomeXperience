@@ -97,6 +97,8 @@ export async function POST(request: Request) {
           newRows: preview.newRows,
           errorRows: preview.errorRows,
           skippedRows: preview.skippedRows,
+          autoFixedRows: preview.autoFixedRows,
+          autoFixSummary: preview.autoFixSummary,
           expensesDetected: preview.expensesDetected,
           importableRows: preview.importableRows,
           financialStatement: preview.financialStatement,

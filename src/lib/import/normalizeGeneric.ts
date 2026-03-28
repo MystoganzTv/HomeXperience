@@ -1,5 +1,10 @@
 import { normalizeExpenseFields } from "@/lib/expense-normalization";
 import {
+  applyReviewMetadata,
+  normalizeChannelLabel,
+  shouldNoteDateStandardization,
+} from "./autoFix";
+import {
   findHeaderRowIndex,
   genericBookingColumns,
   genericBookingRequiredColumns,
@@ -18,7 +23,12 @@ import {
   parseNights,
 } from "./dates";
 import { inferCurrency, parseMoney } from "./money";
-import { validateBookingRow, validateExpenseRow } from "./validators";
+import {
+  rowLooksLikeSeparator,
+  rowLooksLikeSummary,
+  validateBookingRow,
+  validateExpenseRow,
+} from "./validators";
 import type {
   ImportBookingCandidate,
   ImportExpenseCandidate,
@@ -117,6 +127,7 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
   const warnings: ImportValidationWarning[] = [];
   const bookings: ImportBookingCandidate[] = [];
   const expenses: ImportExpenseCandidate[] = [];
+  let skippedRows = 0;
 
   bookingsSheet.rows
     .slice(bookingHeaderRowIndex + 1)
@@ -127,6 +138,11 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
       }
 
       const rowIndex = bookingHeaderRowIndex + index + 2;
+      const rawRow = toRawRow(bookingHeaders, row);
+      if (rowLooksLikeSummary(rawRow) || rowLooksLikeSeparator(rawRow)) {
+        skippedRows += 1;
+        return;
+      }
       const grossMoney = parseMoney(getCell(row, bookingOptional.totalRevenue));
       const payoutMoney = parseMoney(getCell(row, bookingOptional.payout));
       const feeMoney = parseMoney(getCell(row, bookingOptional.hostFee));
@@ -141,21 +157,62 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
       const derivedNights =
         parseNights(getCell(row, bookingOptional.rentalPeriod)) ||
         calculateNights(checkInMeta.value, checkOutMeta.value);
+      const autoFixesApplied: string[] = [];
+      const normalizedChannel = normalizeChannelLabel(String(getCell(row, bookingOptional.channel) ?? "").trim());
+      const channel =
+        normalizedChannel || "Direct";
+
+      if (!normalizedChannel) {
+        autoFixesApplied.push("Inferred channel from source");
+      } else if (normalizedChannel !== String(getCell(row, bookingOptional.channel) ?? "").trim()) {
+        autoFixesApplied.push("Normalized channel label");
+      }
+
+      if (!parseNights(getCell(row, bookingOptional.rentalPeriod)) && derivedNights > 0 && checkInMeta.value && checkOutMeta.value) {
+        autoFixesApplied.push("Calculated nights from dates");
+      }
+
+      if (payoutMoney.value <= 0 && grossMoney.value > 0 && Math.abs(feeMoney.value) >= 0) {
+        autoFixesApplied.push("Computed payout from revenue and platform fee");
+      }
+
+      if (grossMoney.value <= 0 && payoutMoney.value > 0 && Math.abs(feeMoney.value) > 0) {
+        autoFixesApplied.push("Computed gross revenue from payout and platform fee");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, bookingIndexes.checkIn), checkInMeta.value, checkInMeta)) {
+        autoFixesApplied.push("Standardized check-in date");
+      }
+
+      if (shouldNoteDateStandardization(getCell(row, bookingIndexes.checkOut), checkOutMeta.value, checkOutMeta)) {
+        autoFixesApplied.push("Standardized check-out date");
+      }
+
+      const payout =
+        payoutMoney.value > 0
+          ? payoutMoney.value
+          : Math.max(0, grossMoney.value - Math.max(0, Math.abs(feeMoney.value)));
+
+      const grossRevenue =
+        grossMoney.value > 0
+          ? grossMoney.value
+          : Math.max(0, payout + Math.max(0, Math.abs(feeMoney.value)));
+
       const booking: NormalizedImportBooking = {
         source: "generic",
         propertyName: String(getCell(row, bookingOptional.propertyName) ?? "").trim(),
         bookingReference: String(getCell(row, bookingOptional.bookingReference) ?? "").trim(),
         guestName: String(getCell(row, bookingIndexes.guestName) ?? "").trim(),
-        channel: String(getCell(row, bookingOptional.channel) ?? "").trim() || "Direct",
+        channel,
         checkIn: checkInMeta.value,
         checkOut: checkOutMeta.value,
         nights: derivedNights,
         guests: Number(String(getCell(row, bookingOptional.guests) ?? "").replace(/[^\d]/g, "")) || 0,
-        grossRevenue: grossMoney.value,
+        grossRevenue,
         platformFee: Math.max(0, Math.abs(feeMoney.value)),
         cleaningFee: Math.max(0, cleaningMoney.value),
         taxAmount: Math.max(0, Math.abs(taxMoney.value)),
-        payout: payoutMoney.value,
+        payout,
         currency: inferCurrency(
           grossMoney.currency,
           payoutMoney.currency,
@@ -164,7 +221,10 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
           taxMoney.currency,
         ),
         status: String(getCell(row, bookingOptional.status) ?? "").trim() || "Booked",
-        rawRow: toRawRow(bookingHeaders, row),
+        rawRow,
+        autoFixesApplied,
+        needsReview: false,
+        reviewReasons: [],
       };
 
       const rowWarnings = validateBookingRow({
@@ -192,7 +252,7 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
       warnings.push(...rowWarnings);
       bookings.push({
         rowIndex,
-        booking,
+        booking: applyReviewMetadata(booking, rowWarnings),
         warnings: rowWarnings,
       });
     });
@@ -206,6 +266,11 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
       }
 
       const rowIndex = expenseHeaderRowIndex + index + 2;
+      const rawRow = toRawRow(expenseHeaders, row);
+      if (rowLooksLikeSummary(rawRow) || rowLooksLikeSeparator(rawRow)) {
+        skippedRows += 1;
+        return;
+      }
       const normalizedExpenseFields = normalizeExpenseFields({
         amountValue: getCell(row, expenseIndexes.amount),
         descriptionValue: getCell(row, expenseOptional.description),
@@ -215,6 +280,10 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
         datePreference: expenseDatePreference,
       });
       const amountMeta = parseMoney(getCell(row, expenseIndexes.amount));
+      const autoFixesApplied: string[] = [];
+      if (shouldNoteDateStandardization(getCell(row, expenseIndexes.date), expenseDateMeta.value, expenseDateMeta)) {
+        autoFixesApplied.push("Standardized expense date");
+      }
       const expense: NormalizedImportExpense = {
         source: "generic",
         propertyName: String(getCell(row, expenseOptional.propertyName) ?? "").trim(),
@@ -223,7 +292,10 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
         description: normalizedExpenseFields.description,
         note: normalizedExpenseFields.note,
         amount: amountMeta.malformed ? normalizedExpenseFields.amount : amountMeta.value,
-        rawRow: toRawRow(expenseHeaders, row),
+        rawRow,
+        autoFixesApplied,
+        needsReview: false,
+        reviewReasons: [],
       };
 
       const rowWarnings = validateExpenseRow({
@@ -235,7 +307,7 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
       warnings.push(...rowWarnings);
       expenses.push({
         rowIndex,
-        expense,
+        expense: applyReviewMetadata(expense, rowWarnings),
         warnings: rowWarnings,
       });
     });
@@ -246,7 +318,7 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
     expenses,
     warnings,
     duplicates: [],
-    skippedRows: 0,
+    skippedRows,
     totalRowsRead: bookings.length + expenses.length,
   };
 }

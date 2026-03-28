@@ -18,12 +18,23 @@ function buildIssue(
   };
 }
 
-function rowLooksLikeSummary(rawRow: RawImportRow) {
+export function rowLooksLikeSummary(rawRow: RawImportRow) {
   const text = Object.values(rawRow)
     .map((value) => String(value ?? "").trim().toLowerCase())
     .join(" ");
 
   return /\b(total|subtotal|summary|grand total|balance due|overall total)\b/.test(text);
+}
+
+export function rowLooksLikeSeparator(rawRow: RawImportRow) {
+  const values = Object.values(rawRow).map((value) => String(value ?? "").trim());
+  const nonEmptyValues = values.filter(Boolean);
+
+  if (nonEmptyValues.length === 0) {
+    return true;
+  }
+
+  return nonEmptyValues.every((value) => /^[\s\-–—_=.:/\\|]+$/.test(value));
 }
 
 export function validateBookingRow({
