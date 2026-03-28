@@ -10,6 +10,7 @@ import {
   ChartNoAxesCombined,
   ChevronsLeft,
   ChevronsRight,
+  DatabaseZap,
   LayoutDashboard,
   LogOut,
   ReceiptText,
@@ -57,6 +58,7 @@ const baseNavItems: Array<{
   { id: "cashflow", label: "Cashflow", href: "/dashboard/cashflow", icon: Wallet },
   { id: "performance", label: "Performance", href: "/dashboard/performance", icon: ChartNoAxesCombined },
   { id: "reports", label: "Reports", href: "/dashboard/reports", icon: FileText },
+  { id: "imports", label: "Import Center", href: "/dashboard/imports", icon: DatabaseZap },
 ];
 
 function navClassName(active: boolean) {
