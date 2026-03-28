@@ -20,18 +20,18 @@ import {
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 
 const calendarMonthOptions = [
-  { value: 0, label: "January" },
-  { value: 1, label: "February" },
-  { value: 2, label: "March" },
-  { value: 3, label: "April" },
-  { value: 4, label: "May" },
-  { value: 5, label: "June" },
-  { value: 6, label: "July" },
-  { value: 7, label: "August" },
-  { value: 8, label: "September" },
-  { value: 9, label: "October" },
-  { value: 10, label: "November" },
-  { value: 11, label: "December" },
+  { value: 0, label: "January", shortLabel: "Jan" },
+  { value: 1, label: "February", shortLabel: "Feb" },
+  { value: 2, label: "March", shortLabel: "Mar" },
+  { value: 3, label: "April", shortLabel: "Apr" },
+  { value: 4, label: "May", shortLabel: "May" },
+  { value: 5, label: "June", shortLabel: "Jun" },
+  { value: 6, label: "July", shortLabel: "Jul" },
+  { value: 7, label: "August", shortLabel: "Aug" },
+  { value: 8, label: "September", shortLabel: "Sep" },
+  { value: 9, label: "October", shortLabel: "Oct" },
+  { value: 10, label: "November", shortLabel: "Nov" },
+  { value: 11, label: "December", shortLabel: "Dec" },
 ];
 
 function buildCalendarDays(month: Date) {
@@ -270,13 +270,14 @@ export function WorkspaceDateField({
                         setVisibleMonth(new Date(getYear(visibleMonth), month.value, 1));
                         setActivePicker(null);
                       }}
+                      title={month.label}
                       className={`rounded-2xl px-3 py-3 text-sm font-medium transition ${
                         isActive
                           ? "bg-[var(--workspace-accent)] text-slate-950 shadow-[0_12px_30px_rgba(88,196,182,0.28)]"
                           : "bg-white/[0.03] text-[var(--workspace-text)] hover:bg-white/[0.08]"
                       }`}
                     >
-                      {month.label}
+                      {month.shortLabel}
                     </button>
                   );
                 })}
