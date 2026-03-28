@@ -73,6 +73,20 @@ function getGuestLabel(booking: BookingRecord) {
   return extraGuests > 0 ? `${primary} + ${extraGuests}` : primary;
 }
 
+function getBookingSelectionKey(booking: BookingRecord) {
+  if (booking.id) {
+    return `id-${booking.id}`;
+  }
+
+  return [
+    booking.checkIn,
+    booking.checkout,
+    booking.guestName.trim().toLowerCase(),
+    booking.bookingNumber.trim().toLowerCase(),
+    booking.propertyName.trim().toLowerCase(),
+  ].join("__");
+}
+
 function intersectsMonth(booking: BookingRecord, anchorDate: Date) {
   const monthStart = startOfMonth(anchorDate);
   const monthEnd = endOfMonth(anchorDate);
@@ -436,7 +450,7 @@ export function CalendarPanel({
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <Link
-                href="/dashboard/bookings"
+                href={`/dashboard/bookings?booking=${encodeURIComponent(getBookingSelectionKey(selectedBooking))}`}
                 className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition"
               >
                 Open bookings page

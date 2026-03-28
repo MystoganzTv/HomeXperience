@@ -71,6 +71,8 @@ export default async function BookingsPage({
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
   });
+  const highlightedBookingKey =
+    typeof resolvedSearchParams.booking === "string" ? resolvedSearchParams.booking : null;
 
   const propertyCount = new Set(filteredBookings.map((booking) => booking.propertyName)).size;
 
@@ -135,6 +137,7 @@ export default async function BookingsPage({
             bookings={filteredBookings}
             currencyCode={view.displayCurrencyCode}
             properties={properties}
+            highlightedBookingKey={highlightedBookingKey}
           />
         </SectionCard>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
@@ -13,14 +13,30 @@ function inputClassName() {
   return "input-surface w-full rounded-2xl px-4 py-3 text-sm";
 }
 
+function getBookingSelectionKey(booking: BookingRecord) {
+  if (booking.id) {
+    return `id-${booking.id}`;
+  }
+
+  return [
+    booking.checkIn,
+    booking.checkout,
+    booking.guestName.trim().toLowerCase(),
+    booking.bookingNumber.trim().toLowerCase(),
+    booking.propertyName.trim().toLowerCase(),
+  ].join("__");
+}
+
 export function BookingsManager({
   bookings,
   currencyCode,
   properties,
+  highlightedBookingKey,
 }: {
   bookings: BookingRecord[];
   currencyCode: CurrencyCode;
   properties: PropertyDefinition[];
+  highlightedBookingKey?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -28,6 +44,29 @@ export function BookingsManager({
   const [bookingToDelete, setBookingToDelete] = useState<BookingRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const bookingRowRefs = useRef(new Map<string, HTMLTableRowElement>());
+
+  const highlightedBooking = useMemo(
+    () =>
+      highlightedBookingKey
+        ? bookings.find((booking) => getBookingSelectionKey(booking) === highlightedBookingKey) ?? null
+        : null,
+    [bookings, highlightedBookingKey],
+  );
+
+  useEffect(() => {
+    if (!highlightedBookingKey) {
+      return;
+    }
+
+    const row = bookingRowRefs.current.get(highlightedBookingKey);
+
+    if (!row) {
+      return;
+    }
+
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedBookingKey]);
 
   function submitUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +141,11 @@ export function BookingsManager({
       <div className="space-y-4">
         {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
         {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+        {highlightedBooking ? (
+          <div className="rounded-[20px] border border-[var(--accent-soft-strong)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-text)]">
+            Highlighting <span className="font-semibold text-white">{highlightedBooking.guestName}</span> from the calendar view.
+          </div>
+        ) : null}
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -119,8 +163,26 @@ export function BookingsManager({
               </tr>
             </thead>
             <tbody>
-              {bookings.map((booking) => (
-                <tr key={booking.id ?? `${booking.checkIn}-${booking.guestName}`} className="border-t border-[var(--workspace-border)] text-[var(--workspace-muted)]">
+              {bookings.map((booking) => {
+                const bookingKey = getBookingSelectionKey(booking);
+                const isHighlighted = highlightedBookingKey === bookingKey;
+
+                return (
+                <tr
+                  key={booking.id ?? `${booking.checkIn}-${booking.guestName}`}
+                  ref={(node) => {
+                    if (node) {
+                      bookingRowRefs.current.set(bookingKey, node);
+                    } else {
+                      bookingRowRefs.current.delete(bookingKey);
+                    }
+                  }}
+                  className={`border-t text-[var(--workspace-muted)] transition ${
+                    isHighlighted
+                      ? "border-[var(--accent-soft-strong)] bg-[rgba(88,196,182,0.08)] shadow-[inset_0_0_0_1px_rgba(88,196,182,0.22)]"
+                      : "border-[var(--workspace-border)]"
+                  }`}
+                >
                   <td className="py-4 pr-4">
                     <div>
                       <p className="font-medium text-[var(--workspace-text)]">{booking.propertyName}</p>
@@ -150,6 +212,11 @@ export function BookingsManager({
                   <td className="py-4 pr-4">{formatCurrency(booking.payout, false, currencyCode)}</td>
                   <td className="py-4">
                     <div className="flex flex-wrap gap-2">
+                      {isHighlighted ? (
+                        <span className="inline-flex items-center rounded-xl border border-[var(--accent-soft-strong)] bg-[var(--accent-soft)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--accent-text)]">
+                          From calendar
+                        </span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setEditingBooking(booking)}
@@ -170,7 +237,7 @@ export function BookingsManager({
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
