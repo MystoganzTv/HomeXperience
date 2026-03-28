@@ -584,7 +584,7 @@ export function OnboardingFlow({
 
           <UploadPanel
             properties={properties}
-            title="Upload Airbnb, Booking.com, or Excel"
+            title="Upload Airbnb or Hostlyx Excel"
             subtitle="Bring in your bookings, payouts, and expenses so the dashboard opens with real financial data."
             refreshOnSuccess={false}
             onImportComplete={({ propertyName }) => {

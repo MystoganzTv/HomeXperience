@@ -1,12 +1,8 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
-import {
-  appendImportData,
-  getImportedWorkbookMatches,
-  getPropertyDefinitions,
-} from "@/lib/db";
-import { getImportedSourceLabel, parseImportFile } from "@/lib/workbook";
+import { appendImportData, getPropertyDefinitions } from "@/lib/db";
+import { buildImportPreview, mapPreviewToHostlyxRecords } from "@/lib/import/importPipeline";
 
 export const runtime = "nodejs";
 
@@ -19,34 +15,61 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
+    const action = String(formData.get("action") ?? "preview").trim().toLowerCase();
+    const fileValue = formData.get("file");
+
+    if (!(fileValue instanceof File) || fileValue.size <= 0) {
+      return NextResponse.json(
+        { error: "Attach a valid Airbnb or Hostlyx file first." },
+        { status: 400 },
+      );
+    }
+
+    if (!/\.(csv|xlsx|xls)$/i.test(fileValue.name)) {
+      return NextResponse.json(
+        { error: "Only CSV or Excel files are supported for import preview." },
+        { status: 400 },
+      );
+    }
+
+    const buffer = await fileValue.arrayBuffer();
+    const preview = buildImportPreview(buffer, fileValue.name);
+
+    if (action !== "commit") {
+      return NextResponse.json({
+        preview: {
+          source: preview.source,
+          sourceLabel: preview.sourceLabel,
+          fileName: preview.fileName,
+          totalRowsRead: preview.totalRowsRead,
+          validRows: preview.validRows,
+          warningRows: preview.warningRows,
+          skippedRows: preview.skippedRows,
+          expensesDetected: preview.expensesDetected,
+          previewRows: preview.previewRows,
+          warnings: preview.warnings,
+          canImport: preview.canImport,
+        },
+      });
+    }
+
+    if (!preview.canImport) {
+      return NextResponse.json(
+        { error: "This file needs attention before Hostlyx can import it." },
+        { status: 400 },
+      );
+    }
+
     const propertyDefinitions = await getPropertyDefinitions(ownerEmail);
 
     if (propertyDefinitions.length === 0) {
       return NextResponse.json(
-        { error: "Create your first property before importing a workbook." },
+        { error: "Create your first property before importing data." },
         { status: 400 },
       );
     }
 
-    const files = formData
-      .getAll("files")
-      .filter((value): value is File => value instanceof File && value.size > 0);
-    const fallbackFile = formData.get("file");
     const requestedPropertyName = String(formData.get("propertyName") ?? "").trim();
-    const workbookFiles =
-      files.length > 0
-        ? files
-        : fallbackFile instanceof File && fallbackFile.size > 0
-          ? [fallbackFile]
-          : [];
-
-    if (workbookFiles.length === 0) {
-      return NextResponse.json(
-        { error: "Attach a valid CSV or Excel file to import." },
-        { status: 400 },
-      );
-    }
-
     const targetPropertyName = requestedPropertyName || propertyDefinitions[0]?.name || "";
 
     if (
@@ -61,143 +84,37 @@ export async function POST(request: Request) {
       );
     }
 
-    let totalBookings = 0;
-    let totalExpenses = 0;
-    let totalClosures = 0;
-    let totalSkippedBookings = 0;
-    let totalSkippedExpenses = 0;
-    let totalSkippedClosures = 0;
-    let totalSkippedWorkbooks = 0;
-    const importedFiles: string[] = [];
-    const importDetails: Array<{
-      fileName: string;
-      source: string;
-      sourceLabel: string;
-      rowsImported: number;
-      bookingsImported: number;
-      payoutsDetected: number;
-      feesDetected: number;
-      skippedRows: number;
-      warnings: Array<{ code: string; message: string }>;
-    }> = [];
-    const seenWorkbookHashes = new Set<string>();
-
-    for (const file of workbookFiles) {
-      if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
-        return NextResponse.json(
-          { error: `Only CSV or Excel files are supported. "${file.name}" is not valid.` },
-          { status: 400 },
-        );
-      }
-
-      const buffer = await file.arrayBuffer();
-      const workbookHash = createHash("sha256")
-        .update(Buffer.from(buffer))
-        .digest("hex");
-
-      if (seenWorkbookHashes.has(workbookHash)) {
-        totalSkippedWorkbooks += 1;
-        continue;
-      }
-
-      seenWorkbookHashes.add(workbookHash);
-      const existingMatches = await getImportedWorkbookMatches(ownerEmail, [workbookHash]);
-
-      if (existingMatches.length > 0) {
-        totalSkippedWorkbooks += 1;
-        continue;
-      }
-
-      const parsedImport = parseImportFile(buffer, file.name);
-
-      const result = await appendImportData({
-        ownerEmail,
-        fileName: file.name,
-        workbookHash,
-        propertyName: targetPropertyName,
-        source: "upload",
-        importedSource: parsedImport.importedSource,
-        bookings: parsedImport.bookings.map((booking) => ({
-          ...booking,
-          propertyName: targetPropertyName,
-        })),
-        expenses: parsedImport.expenses.map((expense) => ({
-          ...expense,
-          propertyName: targetPropertyName,
-        })),
-        closures: parsedImport.closures.map((closure) => ({
-          ...closure,
-          propertyName: targetPropertyName,
-        })),
-      });
-
-      totalBookings += result.bookingsCount;
-      totalExpenses += result.expensesCount;
-      totalClosures += result.closuresCount;
-      totalSkippedBookings += result.skippedBookingsCount;
-      totalSkippedExpenses += result.skippedExpensesCount;
-      totalSkippedClosures += result.skippedClosuresCount;
-      importedFiles.push(file.name);
-      importDetails.push({
-        fileName: file.name,
-        source: parsedImport.importedSource,
-        sourceLabel:
-          parsedImport.summary.sourceLabel || getImportedSourceLabel(parsedImport.importedSource),
-        rowsImported: parsedImport.summary.rowsImported,
-        bookingsImported: parsedImport.summary.bookingsImported,
-        payoutsDetected: parsedImport.summary.payoutsDetected,
-        feesDetected: parsedImport.summary.feesDetected,
-        skippedRows: parsedImport.summary.skippedRows,
-        warnings: parsedImport.summary.warnings,
-      });
-    }
-
-    const duplicateNotice =
-      totalSkippedBookings > 0 ||
-      totalSkippedExpenses > 0 ||
-      totalSkippedClosures > 0 ||
-      totalSkippedWorkbooks > 0
-        ? ` Skipped ${totalSkippedWorkbooks} duplicate files, ${totalSkippedBookings} duplicate bookings, ${totalSkippedExpenses} duplicate expenses, and ${totalSkippedClosures} duplicate closed-day records already saved in Hostlyx.`
-        : "";
-    const fileLabel =
-      importedFiles.length === 1
-        ? importedFiles[0]
-        : `${importedFiles.length} files`;
-
-    if (importedFiles.length === 0 && totalSkippedWorkbooks > 0) {
-      return NextResponse.json({
-        message: `No new files were imported. Hostlyx recognized ${totalSkippedWorkbooks} selected file${totalSkippedWorkbooks === 1 ? "" : "s"} as already saved by content, so nothing new was added.`,
-      });
-    }
+    const workbookHash = createHash("sha256")
+      .update(Buffer.from(buffer))
+      .digest("hex");
+    const mapped = mapPreviewToHostlyxRecords(preview, targetPropertyName);
+    const result = await appendImportData({
+      ownerEmail,
+      fileName: fileValue.name,
+      workbookHash,
+      propertyName: targetPropertyName,
+      source: "upload",
+      importedSource: mapped.importedSource,
+      bookings: mapped.bookings,
+      expenses: mapped.expenses,
+      closures: [],
+    });
 
     return NextResponse.json({
-      message: `Added ${totalBookings} bookings, ${totalExpenses} expenses, and ${totalClosures} closed-day records from ${fileLabel} into ${targetPropertyName}. The records now live inside Hostlyx and the upload stays in Import History.${duplicateNotice}`,
-      imports: importDetails,
-      summary: {
-        rowsImported: importDetails.reduce((sum, entry) => sum + entry.rowsImported, 0),
-        bookingsImported: importDetails.reduce(
-          (sum, entry) => sum + entry.bookingsImported,
-          0,
-        ),
-        payoutsDetected: importDetails.reduce(
-          (sum, entry) => sum + entry.payoutsDetected,
-          0,
-        ),
-        feesDetected: importDetails.reduce((sum, entry) => sum + entry.feesDetected, 0),
-        skippedRows:
-          importDetails.reduce((sum, entry) => sum + entry.skippedRows, 0) +
-          totalSkippedBookings +
-          totalSkippedExpenses +
-          totalSkippedClosures,
+      message: `Imported ${result.bookingsCount} bookings and ${result.expensesCount} expenses into ${targetPropertyName}.`,
+      committed: {
+        source: preview.source,
+        sourceLabel: preview.sourceLabel,
+        bookingsImported: result.bookingsCount,
+        expensesImported: result.expensesCount,
+        skippedRows: preview.skippedRows,
       },
     });
   } catch (error) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "The file could not be imported.",
+          error instanceof Error ? error.message : "The file could not be processed.",
       },
       { status: 400 },
     );
