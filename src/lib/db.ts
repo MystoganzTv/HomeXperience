@@ -60,6 +60,9 @@ type StoredAuthUser = {
   ownerEmail: string;
   fullName: string;
   passwordHash: string;
+  isVerified: boolean;
+  verificationCodeHash: string | null;
+  verificationExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -290,6 +293,9 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       owner_email TEXT PRIMARY KEY,
       full_name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      is_verified INTEGER NOT NULL DEFAULT 1,
+      verification_code_hash TEXT,
+      verification_expires_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -441,6 +447,18 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "calendar_closures", "owner_email")) {
     db.exec("ALTER TABLE calendar_closures ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
+  }
+
+  if (!hasColumn(db, "auth_users", "is_verified")) {
+    db.exec("ALTER TABLE auth_users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 1;");
+  }
+
+  if (!hasColumn(db, "auth_users", "verification_code_hash")) {
+    db.exec("ALTER TABLE auth_users ADD COLUMN verification_code_hash TEXT;");
+  }
+
+  if (!hasColumn(db, "auth_users", "verification_expires_at")) {
+    db.exec("ALTER TABLE auth_users ADD COLUMN verification_expires_at TEXT;");
   }
 
   if (!hasColumn(db, "calendar_closures", "source")) {
@@ -602,6 +620,9 @@ async function initializePostgresSchema() {
           owner_email TEXT PRIMARY KEY,
           full_name TEXT NOT NULL,
           password_hash TEXT NOT NULL,
+          is_verified BOOLEAN NOT NULL DEFAULT TRUE,
+          verification_code_hash TEXT,
+          verification_expires_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL,
           updated_at TIMESTAMPTZ NOT NULL
         );
@@ -725,6 +746,18 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE imports
         ADD COLUMN IF NOT EXISTS imported_source TEXT NOT NULL DEFAULT 'generic_excel'
+      `);
+      await pool.query(`
+        ALTER TABLE auth_users
+        ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT TRUE
+      `);
+      await pool.query(`
+        ALTER TABLE auth_users
+        ADD COLUMN IF NOT EXISTS verification_code_hash TEXT
+      `);
+      await pool.query(`
+        ALTER TABLE auth_users
+        ADD COLUMN IF NOT EXISTS verification_expires_at TIMESTAMPTZ
       `);
       await pool.query(`
         ALTER TABLE bookings
@@ -985,6 +1018,9 @@ function cloneAuthUser(authUser: StoredAuthUser) {
     ownerEmail: authUser.ownerEmail,
     fullName: authUser.fullName,
     passwordHash: authUser.passwordHash,
+    isVerified: authUser.isVerified,
+    verificationCodeHash: authUser.verificationCodeHash,
+    verificationExpiresAt: authUser.verificationExpiresAt,
     createdAt: authUser.createdAt,
     updatedAt: authUser.updatedAt,
   };
@@ -3939,6 +3975,9 @@ export async function getAuthUserByEmail(email: string) {
           owner_email AS ownerEmail,
           full_name AS fullName,
           password_hash AS passwordHash,
+          is_verified AS isVerified,
+          verification_code_hash AS verificationCodeHash,
+          verification_expires_at AS verificationExpiresAt,
           created_at AS createdAt,
           updated_at AS updatedAt
         FROM auth_users
@@ -3955,6 +3994,15 @@ export async function getAuthUserByEmail(email: string) {
       ownerEmail: String(result.rows[0].owneremail ?? result.rows[0].ownerEmail),
       fullName: String(result.rows[0].fullname ?? result.rows[0].fullName),
       passwordHash: String(result.rows[0].passwordhash ?? result.rows[0].passwordHash),
+      isVerified: Boolean(result.rows[0].isverified ?? result.rows[0].isVerified),
+      verificationCodeHash:
+        result.rows[0].verificationcodehash ?? result.rows[0].verificationCodeHash
+          ? String(result.rows[0].verificationcodehash ?? result.rows[0].verificationCodeHash)
+          : null,
+      verificationExpiresAt: normalizeTimestampValue(
+        result.rows[0].verificationexpiresat ?? result.rows[0].verificationExpiresAt,
+        "",
+      ) || null,
       createdAt: normalizeTimestampValue(
         result.rows[0].createdat ?? result.rows[0].createdAt,
         new Date().toISOString(),
@@ -3980,6 +4028,9 @@ export async function getAuthUserByEmail(email: string) {
           owner_email AS ownerEmail,
           full_name AS fullName,
           password_hash AS passwordHash,
+          is_verified AS isVerified,
+          verification_code_hash AS verificationCodeHash,
+          verification_expires_at AS verificationExpiresAt,
           created_at AS createdAt,
           updated_at AS updatedAt
         FROM auth_users
@@ -3996,6 +4047,15 @@ export async function getAuthUserByEmail(email: string) {
     ownerEmail: String(getRowValue(row, "ownerEmail", "owneremail")),
     fullName: String(getRowValue(row, "fullName", "fullname")),
     passwordHash: String(getRowValue(row, "passwordHash", "passwordhash")),
+    isVerified: Boolean(getRowValue(row, "isVerified", "isverified") ?? true),
+    verificationCodeHash:
+      getRowValue(row, "verificationCodeHash", "verificationcodehash") != null
+        ? String(getRowValue(row, "verificationCodeHash", "verificationcodehash"))
+        : null,
+    verificationExpiresAt: normalizeTimestampValue(
+      getRowValue(row, "verificationExpiresAt", "verificationexpiresat"),
+      "",
+    ) || null,
     createdAt: normalizeTimestampValue(
       getRowValue(row, "createdAt", "createdat"),
       new Date().toISOString(),
@@ -4011,10 +4071,16 @@ export async function createAuthUser({
   email,
   fullName,
   passwordHash,
+  isVerified = true,
+  verificationCodeHash = null,
+  verificationExpiresAt = null,
 }: {
   email: string;
   fullName: string;
   passwordHash: string;
+  isVerified?: boolean;
+  verificationCodeHash?: string | null;
+  verificationExpiresAt?: string | null;
 }) {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(email);
@@ -4035,12 +4101,24 @@ export async function createAuthUser({
           owner_email,
           full_name,
           password_hash,
+          is_verified,
+          verification_code_hash,
+          verification_expires_at,
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `,
-      [normalizedEmail, normalizedFullName, passwordHash, createdAt, createdAt],
+      [
+        normalizedEmail,
+        normalizedFullName,
+        passwordHash,
+        isVerified,
+        verificationCodeHash,
+        verificationExpiresAt,
+        createdAt,
+        createdAt,
+      ],
     );
 
     return;
@@ -4052,6 +4130,9 @@ export async function createAuthUser({
       ownerEmail: normalizedEmail,
       fullName: normalizedFullName,
       passwordHash,
+      isVerified,
+      verificationCodeHash,
+      verificationExpiresAt,
       createdAt,
       updatedAt: createdAt,
     });
@@ -4065,12 +4146,190 @@ export async function createAuthUser({
         owner_email,
         full_name,
         password_hash,
+        is_verified,
+        verification_code_hash,
+        verification_expires_at,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
-  ).run(normalizedEmail, normalizedFullName, passwordHash, createdAt, createdAt);
+  ).run(
+    normalizedEmail,
+    normalizedFullName,
+    passwordHash,
+    isVerified ? 1 : 0,
+    verificationCodeHash,
+    verificationExpiresAt,
+    createdAt,
+    createdAt,
+  );
+}
+
+export async function upsertPendingAuthUser({
+  email,
+  fullName,
+  passwordHash,
+  verificationCodeHash,
+  verificationExpiresAt,
+}: {
+  email: string;
+  fullName: string;
+  passwordHash: string;
+  verificationCodeHash: string;
+  verificationExpiresAt: string;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(email);
+  const normalizedFullName = fullName.trim() || normalizedEmail;
+  const updatedAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    await pool.query(
+      `
+        INSERT INTO auth_users (
+          owner_email,
+          full_name,
+          password_hash,
+          is_verified,
+          verification_code_hash,
+          verification_expires_at,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, FALSE, $4, $5, $6, $6)
+        ON CONFLICT (owner_email) DO UPDATE SET
+          full_name = EXCLUDED.full_name,
+          password_hash = EXCLUDED.password_hash,
+          is_verified = FALSE,
+          verification_code_hash = EXCLUDED.verification_code_hash,
+          verification_expires_at = EXCLUDED.verification_expires_at,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        normalizedEmail,
+        normalizedFullName,
+        passwordHash,
+        verificationCodeHash,
+        verificationExpiresAt,
+        updatedAt,
+      ],
+    );
+
+    return;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const existing = store.authUsers.find((entry) => entry.ownerEmail === normalizedEmail);
+
+    if (existing) {
+      existing.fullName = normalizedFullName;
+      existing.passwordHash = passwordHash;
+      existing.isVerified = false;
+      existing.verificationCodeHash = verificationCodeHash;
+      existing.verificationExpiresAt = verificationExpiresAt;
+      existing.updatedAt = updatedAt;
+      return;
+    }
+
+    store.authUsers.push({
+      ownerEmail: normalizedEmail,
+      fullName: normalizedFullName,
+      passwordHash,
+      isVerified: false,
+      verificationCodeHash,
+      verificationExpiresAt,
+      createdAt: updatedAt,
+      updatedAt,
+    });
+    return;
+  }
+
+  const db = getSQLiteDatabase();
+  db.prepare(
+    `
+      INSERT INTO auth_users (
+        owner_email,
+        full_name,
+        password_hash,
+        is_verified,
+        verification_code_hash,
+        verification_expires_at,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+      ON CONFLICT(owner_email) DO UPDATE SET
+        full_name = excluded.full_name,
+        password_hash = excluded.password_hash,
+        is_verified = 0,
+        verification_code_hash = excluded.verification_code_hash,
+        verification_expires_at = excluded.verification_expires_at,
+        updated_at = excluded.updated_at
+    `,
+  ).run(
+    normalizedEmail,
+    normalizedFullName,
+    passwordHash,
+    verificationCodeHash,
+    verificationExpiresAt,
+    updatedAt,
+    updatedAt,
+  );
+}
+
+export async function markAuthUserVerified({
+  email,
+}: {
+  email: string;
+}) {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(email);
+  const updatedAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    await pool.query(
+      `
+        UPDATE auth_users
+        SET
+          is_verified = TRUE,
+          verification_code_hash = NULL,
+          verification_expires_at = NULL,
+          updated_at = $2
+        WHERE owner_email = $1
+      `,
+      [normalizedEmail, updatedAt],
+    );
+    return;
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const existing = store.authUsers.find((entry) => entry.ownerEmail === normalizedEmail);
+    if (existing) {
+      existing.isVerified = true;
+      existing.verificationCodeHash = null;
+      existing.verificationExpiresAt = null;
+      existing.updatedAt = updatedAt;
+    }
+    return;
+  }
+
+  const db = getSQLiteDatabase();
+  db.prepare(
+    `
+      UPDATE auth_users
+      SET
+        is_verified = 1,
+        verification_code_hash = NULL,
+        verification_expires_at = NULL,
+        updated_at = ?
+      WHERE owner_email = ?
+    `,
+  ).run(updatedAt, normalizedEmail);
 }
 
 function createDefaultStoredSubscription(ownerEmail: string): StoredSubscription {

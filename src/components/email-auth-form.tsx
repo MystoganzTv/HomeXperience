@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { Lock, Mail, ShieldCheck, UserRound } from "lucide-react";
 
 type Mode = "sign-in" | "sign-up";
+type Stage = "form" | "verify";
 
 function inputClassName() {
   return "w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400";
@@ -15,9 +16,11 @@ export function EmailAuthForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("sign-in");
+  const [stage, setStage] = useState<Stage>("form");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -29,7 +32,7 @@ export function EmailAuthForm() {
     startTransition(() => {
       void (async () => {
         try {
-          if (mode === "sign-up") {
+          if (mode === "sign-up" && stage === "form") {
             const registerFormData = new FormData();
             registerFormData.set("fullName", fullName);
             registerFormData.set("email", email);
@@ -49,7 +52,33 @@ export function EmailAuthForm() {
               return;
             }
 
-            setMessage(registerPayload.message ?? "Account created. Signing you in now.");
+            setStage("verify");
+            setMessage(
+              registerPayload.message ?? "We sent a verification code to your email.",
+            );
+            return;
+          }
+
+          if (mode === "sign-up" && stage === "verify") {
+            const verifyFormData = new FormData();
+            verifyFormData.set("email", email);
+            verifyFormData.set("code", verificationCode);
+
+            const verifyResponse = await fetch("/api/auth/verify", {
+              method: "POST",
+              body: verifyFormData,
+            });
+            const verifyPayload = (await verifyResponse.json()) as {
+              error?: string;
+              message?: string;
+            };
+
+            if (!verifyResponse.ok) {
+              setError(verifyPayload.error ?? "The verification code is not valid.");
+              return;
+            }
+
+            setMessage(verifyPayload.message ?? "Email verified. Signing you in now.");
           }
 
           const result = await signIn("credentials", {
@@ -85,6 +114,7 @@ export function EmailAuthForm() {
           type="button"
           onClick={() => {
             setMode("sign-in");
+            setStage("form");
             setError(null);
             setMessage(null);
           }}
@@ -100,6 +130,7 @@ export function EmailAuthForm() {
           type="button"
           onClick={() => {
             setMode("sign-up");
+            setStage("form");
             setError(null);
             setMessage(null);
           }}
@@ -114,7 +145,7 @@ export function EmailAuthForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {mode === "sign-up" ? (
+        {mode === "sign-up" && stage === "form" ? (
           <div>
             <label className="block text-center text-sm font-semibold text-slate-700">
               Full name
@@ -169,6 +200,41 @@ export function EmailAuthForm() {
           </div>
         </div>
 
+        {mode === "sign-up" && stage === "verify" ? (
+          <div>
+            <label className="block text-center text-sm font-semibold text-slate-700">
+              Verification code
+            </label>
+            <div className="login-input-shell mt-3 flex items-center gap-3 rounded-[18px] px-4 py-4">
+              <ShieldCheck className="h-5 w-5 text-slate-400" />
+              <input
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value.replace(/[^\d]/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="6-digit code"
+                className={inputClassName()}
+                required
+              />
+            </div>
+            <p className="mt-3 text-center text-sm leading-6 text-slate-500">
+              We sent a 6-digit code to <span className="font-semibold text-slate-700">{email}</span>.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setStage("form");
+                setVerificationCode("");
+                setError(null);
+                setMessage("Request a new code by creating the account again.");
+              }}
+              className="mt-3 w-full text-center text-sm font-semibold text-slate-500 transition hover:text-slate-900"
+            >
+              Use a different email or resend code
+            </button>
+          </div>
+        ) : null}
+
         <button
           type="submit"
           disabled={isPending}
@@ -177,10 +243,14 @@ export function EmailAuthForm() {
           <ShieldCheck className="h-5 w-5" />
           {isPending
             ? mode === "sign-up"
-              ? "Creating account..."
+              ? stage === "verify"
+                ? "Verifying..."
+                : "Creating account..."
               : "Signing in..."
             : mode === "sign-up"
-              ? "Create account"
+              ? stage === "verify"
+                ? "Verify email"
+                : "Create account"
               : "Sign in"}
         </button>
       </form>

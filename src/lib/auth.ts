@@ -41,7 +41,7 @@ export const authOptions: NextAuthOptions = {
 
         const authUser = await getAuthUserByEmail(email);
 
-        if (!authUser || !verifyPassword(password, authUser.passwordHash)) {
+        if (!authUser || !verifyPassword(password, authUser.passwordHash) || !authUser.isVerified) {
           return null;
         }
 

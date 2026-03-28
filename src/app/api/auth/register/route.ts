@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { createAuthUser, getAuthUserByEmail } from "@/lib/db";
+import { getAuthUserByEmail, upsertPendingAuthUser } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/auth";
+import {
+  generateVerificationCode,
+  getVerificationExpiry,
+  hashVerificationCode,
+  sendVerificationEmail,
+} from "@/lib/email-verification";
 import { hashPassword, isValidPassword, normalizeAuthEmail } from "@/lib/password";
 
 export const runtime = "nodejs";
@@ -42,21 +48,32 @@ export async function POST(request: Request) {
 
     const existingUser = await getAuthUserByEmail(email);
 
-    if (existingUser) {
+    if (existingUser?.isVerified) {
       return NextResponse.json(
         { error: "An account with that email already exists." },
         { status: 409 },
       );
     }
 
-    await createAuthUser({
+    const verificationCode = generateVerificationCode();
+    const verificationExpiresAt = getVerificationExpiry();
+
+    await upsertPendingAuthUser({
       email,
       fullName,
       passwordHash: hashPassword(password),
+      verificationCodeHash: hashVerificationCode(verificationCode),
+      verificationExpiresAt,
+    });
+    await sendVerificationEmail({
+      email,
+      fullName,
+      code: verificationCode,
     });
 
     return NextResponse.json({
-      message: "Account created. Signing you in now.",
+      message: "We sent a verification code to your email. Enter it to finish creating your account.",
+      requiresVerification: true,
     });
   } catch (error) {
     return NextResponse.json(
