@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
+import { getBookingStatusState } from "@/lib/booking-status";
 import { Modal } from "@/components/modal";
 import { SectionCard } from "@/components/section-card";
 import type {
@@ -371,6 +372,28 @@ export function CalendarPanel({
       >
         {selectedBooking ? (
           <div className="space-y-5">
+            {(() => {
+              const bookingStatus = getBookingStatusState(selectedBooking);
+
+              return (
+                <div
+                  className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                    bookingStatus.tone === "active"
+                      ? "border-emerald-400/28 bg-emerald-400/10 text-emerald-100"
+                      : bookingStatus.tone === "success"
+                        ? "border-teal-300/24 bg-teal-300/[0.08] text-teal-100"
+                        : bookingStatus.tone === "danger"
+                          ? "border-rose-400/26 bg-rose-400/[0.08] text-rose-100"
+                          : bookingStatus.tone === "neutral"
+                            ? "border-white/10 bg-white/[0.04] text-slate-200"
+                            : "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                  }`}
+                >
+                  {bookingStatus.label}
+                </div>
+              );
+            })()}
+
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
               <div className="workspace-soft-card rounded-[24px] p-5">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Stay summary</p>
@@ -424,7 +447,7 @@ export function CalendarPanel({
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[var(--workspace-muted)]">Status</span>
                     <span className="font-medium text-[var(--workspace-text)]">
-                      {selectedBooking.overbookingStatus || "Confirmed"}
+                      {getBookingStatusState(selectedBooking).label}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
