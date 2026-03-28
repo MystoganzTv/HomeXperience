@@ -236,11 +236,6 @@ export function BookingsManager({
                   <td className="py-4 pr-4">{formatCurrency(booking.payout, false, currencyCode)}</td>
                   <td className="py-4">
                     <div className="flex flex-wrap gap-2">
-                      {isHighlighted ? (
-                        <span className="inline-flex items-center rounded-xl border border-[var(--accent-soft-strong)] bg-[var(--accent-soft)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--accent-text)]">
-                          From calendar
-                        </span>
-                      ) : null}
                       <button
                         type="button"
                         onClick={() => setEditingBooking(booking)}
