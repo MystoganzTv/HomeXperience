@@ -154,6 +154,16 @@ type ImportCommittedPayload = {
   financialDocumentsImported?: number;
 };
 
+type ImportCompletePayload = {
+  importedFilesCount: number;
+  propertyName: string;
+  hasRemainingIssues: boolean;
+  bookingsImported: number;
+  expensesImported: number;
+  skippedRows: number;
+  financialDocumentsImported: number;
+};
+
 type UploadToast = {
   tone: ToastTone;
   message: string;
@@ -235,7 +245,7 @@ export function UploadPanel({
   title?: string;
   subtitle?: string;
   refreshOnSuccess?: boolean;
-  onImportComplete?: (payload: { importedFilesCount: number; propertyName: string }) => void;
+  onImportComplete?: (payload: ImportCompletePayload) => void;
   onCancel?: () => void;
 }) {
   const router = useRouter();
@@ -379,30 +389,18 @@ export function UploadPanel({
     return preview.requiresManualMapping || needsFocusedMapping;
   }, [currentManualMapping, needsFocusedMapping, preview]);
 
-  function resetSelection(nextFile: File | null) {
-    setSelectedFile(nextFile);
-    setPreview(null);
-    setManualMapping(null);
-    setDuplicateStrategy("skip");
-    setToast(null);
-    setCommitted(null);
-    setPhase(nextFile ? "idle" : "idle");
-    if (inputRef.current && !nextFile) {
-      inputRef.current.value = "";
-    }
-  }
-
-  async function handlePreview() {
+  async function requestPreview(options?: {
+    preserveToast?: boolean;
+    focusImportAction?: boolean;
+  }) {
     if (!selectedFile) {
-      setToast({
-        tone: "error",
-        message: "Choose an Airbnb, Booking.com, or Hostlyx file before previewing the import.",
-      });
-      return;
+      return null;
     }
 
     setPhase("previewing");
-    setToast(null);
+    if (!options?.preserveToast) {
+      setToast(null);
+    }
 
     try {
       const formData = new FormData();
@@ -439,14 +437,43 @@ export function UploadPanel({
       );
       setDuplicateStrategy("skip");
       setPhase("ready");
-      setShouldFocusImportAction(true);
+      setShouldFocusImportAction(options?.focusImportAction ?? true);
+      return payload.preview;
     } catch (error) {
       setPhase("idle");
       setToast({
         tone: "error",
         message: error instanceof Error ? error.message : "Preview failed.",
       });
+      return null;
     }
+  }
+
+  function resetSelection(nextFile: File | null) {
+    setSelectedFile(nextFile);
+    setPreview(null);
+    setManualMapping(null);
+    setDuplicateStrategy("skip");
+    setToast(null);
+    setCommitted(null);
+    setPhase(nextFile ? "idle" : "idle");
+    if (inputRef.current && !nextFile) {
+      inputRef.current.value = "";
+    }
+  }
+
+  async function handlePreview() {
+    if (!selectedFile) {
+      setToast({
+        tone: "error",
+        message: "Choose an Airbnb, Booking.com, or Hostlyx file before previewing the import.",
+      });
+      return;
+    }
+
+    await requestPreview({
+      focusImportAction: true,
+    });
   }
 
   async function handleImport() {
@@ -507,19 +534,18 @@ export function UploadPanel({
         throw new Error(payload.error ?? "Import failed.");
       }
 
+      const committedPayload = payload.committed ?? null;
+      const hasRemainingIssues =
+        preview.errorRows > 0 ||
+        preview.skippedRows > 0 ||
+        (duplicateStrategy === "skip" && preview.duplicateRows > 0);
+
       setToast({
         tone: "success",
-        message: payload.message ?? "Import completed.",
+        message: hasRemainingIssues
+          ? `Imported ${committedPayload?.bookingsImported ?? 0} booking${committedPayload?.bookingsImported === 1 ? "" : "s"} and ${committedPayload?.expensesImported ?? 0} expense${committedPayload?.expensesImported === 1 ? "" : "s"}. The remaining rows still need changes in the source file.`
+          : payload.message ?? "Import completed.",
       });
-      setPhase("idle");
-      setCommitted(payload.committed ?? null);
-      setSelectedFile(null);
-      setPreview(null);
-      setManualMapping(null);
-
-      if (inputRef.current) {
-        inputRef.current.value = "";
-      }
 
       if (refreshOnSuccess) {
         router.refresh();
@@ -528,7 +554,30 @@ export function UploadPanel({
       onImportComplete?.({
         importedFilesCount: 1,
         propertyName: selectedPropertyName,
+        hasRemainingIssues,
+        bookingsImported: committedPayload?.bookingsImported ?? 0,
+        expensesImported: committedPayload?.expensesImported ?? 0,
+        skippedRows: committedPayload?.skippedRows ?? 0,
+        financialDocumentsImported: committedPayload?.financialDocumentsImported ?? 0,
       });
+
+      if (hasRemainingIssues) {
+        await requestPreview({
+          preserveToast: true,
+          focusImportAction: false,
+        });
+        return;
+      }
+
+      setPhase("idle");
+      setCommitted(committedPayload);
+      setSelectedFile(null);
+      setPreview(null);
+      setManualMapping(null);
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     } catch (error) {
       setPhase("ready");
       setToast({

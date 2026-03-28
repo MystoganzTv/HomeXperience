@@ -88,6 +88,7 @@ export function OnboardingFlow({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [taxError, setTaxError] = useState<string | null>(null);
   const [hasUploadedData, setHasUploadedData] = useState(false);
+  const [uploadNeedsReview, setUploadNeedsReview] = useState(false);
   const [uploadedPropertyName, setUploadedPropertyName] = useState(
     initialProperties[0]?.name ?? defaultPropertyName,
   );
@@ -587,13 +588,41 @@ export function OnboardingFlow({
             title="Upload Airbnb or Hostlyx Excel"
             subtitle="Bring in your bookings, payouts, and expenses so the dashboard opens with real financial data."
             refreshOnSuccess={false}
-            onImportComplete={({ propertyName }) => {
+            onImportComplete={({ propertyName, hasRemainingIssues }) => {
               setUploadedPropertyName(propertyName);
               setHasUploadedData(true);
+              setUploadNeedsReview(hasRemainingIssues);
               setPreviewVersion((current) => current + 1);
-              setCurrentStep(3);
+              if (!hasRemainingIssues) {
+                setCurrentStep(3);
+              }
             }}
           />
+
+          {hasUploadedData && uploadNeedsReview ? (
+            <div className="workspace-card rounded-[28px] border border-amber-300/18 bg-[rgba(122,97,14,0.08)] p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/80">
+                Import review
+              </p>
+              <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-[var(--workspace-text)]">
+                Clean rows are already in Hostlyx.
+              </h3>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--workspace-muted)]">
+                You can keep reviewing this file here, replace it with a corrected version, or continue to the tax
+                setup when you are ready.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="workspace-button-primary inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition"
+                >
+                  Continue to tax rate
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <button

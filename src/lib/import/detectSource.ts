@@ -3,7 +3,9 @@ import {
   bookingComBookingColumns,
   findHeaderRowIndex,
   genericBookingColumns,
+  genericBookingRequiredColumns,
   genericExpenseColumns,
+  genericExpenseRequiredColumns,
   mapOptionalColumns,
   normalizeHeader,
 } from "./columnMatchers";
@@ -22,10 +24,10 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
     ["expenses", "gastos"].includes(sheet.normalizedName),
   );
   const hasGenericBookingHeaders = workbook.sheets.some(
-    (sheet) => findHeaderRowIndex(sheet.rows, genericBookingColumns) >= 0,
+    (sheet) => findHeaderRowIndex(sheet.rows, genericBookingRequiredColumns) >= 0,
   );
   const hasGenericExpenseHeaders = workbook.sheets.some(
-    (sheet) => findHeaderRowIndex(sheet.rows, genericExpenseColumns) >= 0,
+    (sheet) => findHeaderRowIndex(sheet.rows, genericExpenseRequiredColumns) >= 0,
   );
 
   if (hasNamedBookingsSheet && hasNamedExpensesSheet) {

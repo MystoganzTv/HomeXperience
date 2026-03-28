@@ -26,6 +26,14 @@ export const genericBookingColumns = {
   status: ["overbookingstatus", "status", "estado"],
 } as const;
 
+export const genericBookingRequiredColumns = {
+  checkIn: genericBookingColumns.checkIn,
+  checkOut: genericBookingColumns.checkOut,
+  guestName: genericBookingColumns.guestName,
+  totalRevenue: genericBookingColumns.totalRevenue,
+  payout: genericBookingColumns.payout,
+} as const;
+
 export const genericExpenseColumns = {
   date: ["date", "fecha"],
   category: ["category", "categoria"],
@@ -42,6 +50,12 @@ export const genericExpenseColumns = {
     "anuncio",
     "propiedad",
   ],
+} as const;
+
+export const genericExpenseRequiredColumns = {
+  date: genericExpenseColumns.date,
+  category: genericExpenseColumns.category,
+  amount: genericExpenseColumns.amount,
 } as const;
 
 export const airbnbBookingColumns = {
@@ -210,6 +224,18 @@ export function rowIsEmpty(row: ImportSheetRow) {
   return row.every((cell) => String(cell ?? "").trim() === "");
 }
 
+function headerMatchesAlias(header: string, alias: string) {
+  if (!header || !alias) {
+    return false;
+  }
+
+  if (header === alias) {
+    return true;
+  }
+
+  return alias.length >= 3 && header.includes(alias);
+}
+
 export function mapOptionalColumns<T extends string>(
   headers: ImportSheetRow,
   columns: Record<T, readonly string[]>,
@@ -219,9 +245,7 @@ export function mapOptionalColumns<T extends string>(
 
   for (const [key, aliases] of Object.entries(columns) as Array<[T, readonly string[]]>) {
     const index = normalizedHeaders.findIndex(
-      (header) =>
-        aliases.includes(header) ||
-        aliases.some((alias) => header.includes(alias) || alias.includes(header)),
+      (header) => aliases.some((alias) => headerMatchesAlias(header, alias)),
     );
     if (index >= 0) {
       indexes[key] = index;
@@ -240,9 +264,7 @@ export function mapRequiredColumns<T extends string>(
   return Object.fromEntries(
     (Object.entries(columns) as Array<[T, readonly string[]]>).map(([key, aliases]) => {
       const index = normalizedHeaders.findIndex(
-        (header) =>
-          aliases.includes(header) ||
-          aliases.some((alias) => header.includes(alias) || alias.includes(header)),
+        (header) => aliases.some((alias) => headerMatchesAlias(header, alias)),
       );
       if (index < 0) {
         throw new Error(`Missing required column: ${key}`);

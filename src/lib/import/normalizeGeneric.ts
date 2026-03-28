@@ -2,7 +2,9 @@ import { normalizeExpenseFields } from "@/lib/expense-normalization";
 import {
   findHeaderRowIndex,
   genericBookingColumns,
+  genericBookingRequiredColumns,
   genericExpenseColumns,
+  genericExpenseRequiredColumns,
   getCell,
   mapOptionalColumns,
   mapRequiredColumns,
@@ -27,20 +29,65 @@ import type {
   ParsedImportWorkbook,
 } from "./types";
 
+function hasValue(value: unknown) {
+  return String(value ?? "").trim() !== "";
+}
+
+function rowLooksLikeGenericBookingTemplate(
+  row: ParsedImportWorkbook["sheets"][number]["rows"][number],
+  indexes: {
+    checkIn: number;
+    checkOut: number;
+    guestName: number;
+  },
+  optional: Partial<Record<keyof typeof genericBookingColumns, number>>,
+) {
+  const signalValues = [
+    getCell(row, indexes.checkIn),
+    getCell(row, indexes.checkOut),
+    getCell(row, indexes.guestName),
+    getCell(row, optional.bookingReference),
+    getCell(row, optional.propertyName),
+  ];
+
+  return signalValues.every((value) => !hasValue(value));
+}
+
+function rowLooksLikeGenericExpenseTemplate(
+  row: ParsedImportWorkbook["sheets"][number]["rows"][number],
+  indexes: {
+    date: number;
+    category: number;
+    amount: number;
+  },
+  optional: Partial<Record<keyof typeof genericExpenseColumns, number>>,
+) {
+  const signalValues = [
+    getCell(row, indexes.date),
+    getCell(row, indexes.category),
+    getCell(row, indexes.amount),
+    getCell(row, optional.description),
+    getCell(row, optional.propertyName),
+    getCell(row, optional.note),
+  ];
+
+  return signalValues.every((value) => !hasValue(value));
+}
+
 export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormalizationResult {
   const bookingsSheet =
     workbook.sheets.find((sheet) => ["bookings", "reservas"].includes(sheet.normalizedName)) ??
-    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericBookingColumns) >= 0);
+    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericBookingRequiredColumns) >= 0);
   const expensesSheet =
     workbook.sheets.find((sheet) => ["expenses", "gastos"].includes(sheet.normalizedName)) ??
-    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericExpenseColumns) >= 0);
+    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericExpenseRequiredColumns) >= 0);
 
   if (!bookingsSheet || !expensesSheet) {
     throw new Error("Generic imports require both Bookings and Expenses sheets.");
   }
 
-  const bookingHeaderRowIndex = findHeaderRowIndex(bookingsSheet.rows, genericBookingColumns);
-  const expenseHeaderRowIndex = findHeaderRowIndex(expensesSheet.rows, genericExpenseColumns);
+  const bookingHeaderRowIndex = findHeaderRowIndex(bookingsSheet.rows, genericBookingRequiredColumns);
+  const expenseHeaderRowIndex = findHeaderRowIndex(expensesSheet.rows, genericExpenseRequiredColumns);
 
   if (bookingHeaderRowIndex < 0) {
     throw new Error("Hostlyx could not find the Bookings header row.");
@@ -52,21 +99,9 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
 
   const bookingHeaders = bookingsSheet.rows[bookingHeaderRowIndex];
   const expenseHeaders = expensesSheet.rows[expenseHeaderRowIndex];
-  const bookingIndexes = mapRequiredColumns(bookingHeaders, {
-    checkIn: genericBookingColumns.checkIn,
-    checkOut: genericBookingColumns.checkOut,
-    guestName: genericBookingColumns.guestName,
-    totalRevenue: genericBookingColumns.totalRevenue,
-    payout: genericBookingColumns.payout,
-  });
+  const bookingIndexes = mapRequiredColumns(bookingHeaders, genericBookingRequiredColumns);
   const bookingOptional = mapOptionalColumns(bookingHeaders, genericBookingColumns);
-  const expenseIndexes = mapRequiredColumns(expenseHeaders, {
-    date: genericExpenseColumns.date,
-    category: genericExpenseColumns.category,
-    amount: genericExpenseColumns.amount,
-    description: genericExpenseColumns.description,
-    note: genericExpenseColumns.note,
-  });
+  const expenseIndexes = mapRequiredColumns(expenseHeaders, genericExpenseRequiredColumns);
   const expenseOptional = mapOptionalColumns(expenseHeaders, genericExpenseColumns);
   const bookingDatePreference = inferDatePreferenceFromSheet(
     bookingHeaders,
@@ -87,6 +122,10 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
     .slice(bookingHeaderRowIndex + 1)
     .filter((row) => !rowIsEmpty(row))
     .forEach((row, index) => {
+      if (rowLooksLikeGenericBookingTemplate(row, bookingIndexes, bookingOptional)) {
+        return;
+      }
+
       const rowIndex = bookingHeaderRowIndex + index + 2;
       const grossMoney = parseMoney(getCell(row, bookingOptional.totalRevenue));
       const payoutMoney = parseMoney(getCell(row, bookingOptional.payout));
@@ -162,11 +201,15 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
     .slice(expenseHeaderRowIndex + 1)
     .filter((row) => !rowIsEmpty(row))
     .forEach((row, index) => {
+      if (rowLooksLikeGenericExpenseTemplate(row, expenseIndexes, expenseOptional)) {
+        return;
+      }
+
       const rowIndex = expenseHeaderRowIndex + index + 2;
       const normalizedExpenseFields = normalizeExpenseFields({
         amountValue: getCell(row, expenseIndexes.amount),
-        descriptionValue: getCell(row, expenseIndexes.description),
-        noteValue: getCell(row, expenseIndexes.note),
+        descriptionValue: getCell(row, expenseOptional.description),
+        noteValue: getCell(row, expenseOptional.note),
       });
       const expenseDateMeta = parseImportDateDetailed(getCell(row, expenseIndexes.date), {
         datePreference: expenseDatePreference,
@@ -204,8 +247,6 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormaliz
     warnings,
     duplicates: [],
     skippedRows: 0,
-    totalRowsRead:
-      bookingsSheet.rows.slice(bookingHeaderRowIndex + 1).filter((row) => !rowIsEmpty(row)).length +
-      expensesSheet.rows.slice(expenseHeaderRowIndex + 1).filter((row) => !rowIsEmpty(row)).length,
+    totalRowsRead: bookings.length + expenses.length,
   };
 }

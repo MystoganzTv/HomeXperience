@@ -104,6 +104,14 @@ export function parseImportDateDetailed(
     };
   }
 
+  if (/^\d{1,4}$/.test(raw)) {
+    return {
+      value: "",
+      ambiguous: false,
+      malformed: true,
+    };
+  }
+
   const ambiguousMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   const ambiguous =
     !!ambiguousMatch &&
