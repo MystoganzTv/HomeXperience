@@ -263,6 +263,7 @@ export function UploadPanel({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const toastRef = useRef<HTMLDivElement | null>(null);
   const sourceDetectedRef = useRef<HTMLDivElement | null>(null);
   const mappingRef = useRef<HTMLDivElement | null>(null);
   const reviewRef = useRef<HTMLDetailsElement | null>(null);
@@ -780,11 +781,27 @@ export function UploadPanel({
     }
 
     const timer = window.setTimeout(() => {
-      scrollToAttentionTarget();
+      const target = toastRef.current ?? panelRef.current;
+      target?.scrollIntoView({
+        behavior: "smooth",
+        block: target === panelRef.current ? "start" : "center",
+      });
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [needsFocusedMapping, preview, toast]);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!committed || !onCancel) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      onCancel();
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [committed, onCancel]);
 
   useEffect(() => {
     if (!shouldFocusImportAction) {
@@ -811,10 +828,11 @@ export function UploadPanel({
   if (committed) {
     return (
       <div className="relative">
-        {toast ? (
-          <div className="pointer-events-none fixed right-4 top-4 z-[70] w-full max-w-md sm:right-6 sm:top-6">
+        <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-6 sm:p-7">
+          {toast ? (
             <div
-              className={`pointer-events-auto rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.32)] ${
+              ref={toastRef}
+              className={`mb-5 rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${
                 toast.tone === "success"
                   ? "border-emerald-400/24 bg-[rgba(7,28,26,0.96)] text-emerald-100"
                   : "border-rose-400/24 bg-[rgba(40,12,18,0.96)] text-rose-100"
@@ -842,10 +860,8 @@ export function UploadPanel({
                 </button>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-6 sm:p-7">
           <div className="rounded-[28px] border border-emerald-400/18 bg-[radial-gradient(circle_at_top,rgba(125,211,197,0.18),transparent_58%),rgba(255,255,255,0.02)] p-6 sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-3">
@@ -914,6 +930,12 @@ export function UploadPanel({
                 Import another file
               </button>
             </div>
+
+            {onCancel ? (
+              <p className="mt-4 text-sm text-[var(--workspace-muted)]">
+                Everything imported perfectly. Closing this window...
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -922,10 +944,14 @@ export function UploadPanel({
 
   return (
     <div className="relative">
-      {toast ? (
-        <div className="pointer-events-none fixed right-4 top-4 z-[70] w-full max-w-md sm:right-6 sm:top-6">
+      <div
+        ref={panelRef}
+        className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7"
+      >
+        {toast ? (
           <div
-            className={`pointer-events-auto rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.32)] ${
+            ref={toastRef}
+            className={`mb-5 rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${
               toast.tone === "success"
                 ? "border-emerald-400/24 bg-[rgba(7,28,26,0.96)] text-emerald-100"
                 : "border-rose-400/24 bg-[rgba(40,12,18,0.96)] text-rose-100"
@@ -953,13 +979,8 @@ export function UploadPanel({
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div
-        ref={panelRef}
-        className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7"
-      >
         <div className="relative">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">

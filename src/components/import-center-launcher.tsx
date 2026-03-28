@@ -66,7 +66,7 @@ export function ImportCenterLauncher({
         title="Import data"
         onClose={() => setIsUploadOpen(false)}
       >
-        <UploadPanel properties={properties} />
+        <UploadPanel properties={properties} onCancel={() => setIsUploadOpen(false)} />
       </Modal>
     </>
   );

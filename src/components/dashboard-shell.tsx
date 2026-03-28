@@ -922,7 +922,7 @@ export function DashboardShell({
         title="Bring your data"
         onClose={() => setIsUploadOpen(false)}
       >
-        <UploadPanel properties={properties} />
+        <UploadPanel properties={properties} onCancel={() => setIsUploadOpen(false)} />
       </Modal>
 
       <Modal
