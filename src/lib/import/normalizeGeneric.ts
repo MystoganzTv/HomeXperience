@@ -28,8 +28,12 @@ import type {
 } from "./types";
 
 export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormalizationResult {
-  const bookingsSheet = workbook.sheets.find((sheet) => sheet.normalizedName === "bookings");
-  const expensesSheet = workbook.sheets.find((sheet) => sheet.normalizedName === "expenses");
+  const bookingsSheet =
+    workbook.sheets.find((sheet) => ["bookings", "reservas"].includes(sheet.normalizedName)) ??
+    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericBookingColumns) >= 0);
+  const expensesSheet =
+    workbook.sheets.find((sheet) => ["expenses", "gastos"].includes(sheet.normalizedName)) ??
+    workbook.sheets.find((sheet) => findHeaderRowIndex(sheet.rows, genericExpenseColumns) >= 0);
 
   if (!bookingsSheet || !expensesSheet) {
     throw new Error("Generic imports require both Bookings and Expenses sheets.");

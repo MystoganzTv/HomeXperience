@@ -16,6 +16,20 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
   const hasNamedExpensesSheet = workbook.sheets.some((sheet) =>
     ["expenses", "gastos"].includes(sheet.normalizedName),
   );
+  const hasGenericBookingHeaders = workbook.sheets.some(
+    (sheet) => findHeaderRowIndex(sheet.rows, genericBookingColumns) >= 0,
+  );
+  const hasGenericExpenseHeaders = workbook.sheets.some(
+    (sheet) => findHeaderRowIndex(sheet.rows, genericExpenseColumns) >= 0,
+  );
+
+  if (hasNamedBookingsSheet && hasNamedExpensesSheet) {
+    return "generic";
+  }
+
+  if (hasGenericBookingHeaders && hasGenericExpenseHeaders) {
+    return "generic";
+  }
 
   for (const sheet of workbook.sheets) {
     for (let rowIndex = 0; rowIndex < Math.min(sheet.rows.length, 8); rowIndex += 1) {
@@ -75,20 +89,6 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
         return "booking";
       }
     }
-  }
-
-  const hasGenericBookingHeaders = workbook.sheets.some(
-    (sheet) => findHeaderRowIndex(sheet.rows, genericBookingColumns) >= 0,
-  );
-  const hasGenericExpenseHeaders = workbook.sheets.some(
-    (sheet) => findHeaderRowIndex(sheet.rows, genericExpenseColumns) >= 0,
-  );
-
-  if (
-    (hasNamedBookingsSheet && hasNamedExpensesSheet) ||
-    (hasGenericBookingHeaders && hasGenericExpenseHeaders)
-  ) {
-    return "generic";
   }
 
   return "unknown";
