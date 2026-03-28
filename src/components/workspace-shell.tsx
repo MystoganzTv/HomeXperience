@@ -6,6 +6,7 @@ import {
   Shield,
   BookOpenText,
   Building2,
+  CalendarDays,
   ChartNoAxesCombined,
   ChevronsLeft,
   ChevronsRight,
@@ -50,6 +51,7 @@ const baseNavItems: Array<{
   icon: typeof LayoutDashboard;
 }> = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { id: "calendar", label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
   { id: "bookings", label: "Bookings", href: "/dashboard/bookings", icon: BookOpenText },
   { id: "expenses", label: "Expenses", href: "/dashboard/expenses", icon: ReceiptText },
   { id: "cashflow", label: "Cashflow", href: "/dashboard/cashflow", icon: Wallet },
