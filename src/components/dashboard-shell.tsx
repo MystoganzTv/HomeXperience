@@ -12,12 +12,14 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { BookingChannelBadge, BookingStatusBadge } from "@/components/booking-badges";
 import type {
   CurrencyCode,
   DashboardView,
   ImportSummary,
   PropertyDefinition,
 } from "@/lib/types";
+import { getBookingStatusState } from "@/lib/booking-status";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
 import { getMarketDefinition } from "@/lib/markets";
 import { ChartsPanel } from "@/components/charts-panel";
@@ -826,44 +828,56 @@ export function DashboardShell({
                     No bookings yet. Upload a workbook or add the first stay to start reading the business.
                   </div>
                 ) : (
-                  view.recentBookings.map((booking, index) => (
-                    <article
-                      key={recordKey(booking, `${booking.checkIn}-${booking.guestName}`, index)}
-                      className="workspace-soft-card rounded-[22px] p-4"
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-base font-semibold text-[var(--workspace-text)]">{booking.guestName}</p>
-                            <p className="mt-1 text-sm text-[var(--workspace-muted)]">
-                              {booking.channel} • {booking.propertyName}
-                              {booking.unitName ? ` • ${booking.unitName}` : ""}
-                            </p>
-                          </div>
-                          <p className="text-sm text-[var(--workspace-muted)]">
-                            {formatDateLabel(booking.checkIn)} to {formatDateLabel(booking.checkout)}
-                          </p>
-                        </div>
+                  view.recentBookings.map((booking, index) => {
+                    const bookingStatus = getBookingStatusState(booking);
 
-                        <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[300px]">
-                          <div className="workspace-card rounded-[18px] px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Guests</p>
-                            <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">{formatNumber(booking.guestCount)}</p>
-                          </div>
-                          <div className="workspace-card rounded-[18px] px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Nights</p>
-                            <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">{formatNumber(booking.nights)}</p>
-                          </div>
-                          <div className="workspace-card rounded-[18px] px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Payout</p>
-                            <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
-                              {formatCurrency(booking.payout, false, currencyCode)}
+                    return (
+                      <article
+                        key={recordKey(booking, `${booking.checkIn}-${booking.guestName}`, index)}
+                        className="workspace-soft-card rounded-[22px] p-4"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-base font-semibold text-[var(--workspace-text)]">{booking.guestName}</p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--workspace-muted)]">
+                                <span>
+                                  {booking.propertyName}
+                                  {booking.unitName ? ` • ${booking.unitName}` : ""}
+                                </span>
+                                <BookingChannelBadge channel={booking.channel} />
+                              </div>
+                            </div>
+                            <p className="text-sm text-[var(--workspace-muted)]">
+                              {formatDateLabel(booking.checkIn)} to {formatDateLabel(booking.checkout)}
                             </p>
                           </div>
+
+                          <div className="space-y-3 lg:min-w-[320px]">
+                            <div className="flex items-center justify-end">
+                              <BookingStatusBadge status={bookingStatus} />
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div className="workspace-card rounded-[18px] px-3 py-3">
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Guests</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">{formatNumber(booking.guestCount)}</p>
+                              </div>
+                              <div className="workspace-card rounded-[18px] px-3 py-3">
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Nights</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">{formatNumber(booking.nights)}</p>
+                              </div>
+                              <div className="workspace-card rounded-[18px] px-3 py-3">
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Payout</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--workspace-text)]">
+                                  {formatCurrency(booking.payout, false, currencyCode)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </article>
-                  ))
+                      </article>
+                    );
+                  })
                 )}
               </div>
             </SectionCard>

@@ -29,15 +29,23 @@ export function getBookingStatusState(
     return { label: "Blocked", tone: "neutral" };
   }
 
+  if (
+    rawStatus.includes("pending") ||
+    rawStatus.includes("awaiting") ||
+    rawStatus.includes("request")
+  ) {
+    return { label: "Pending", tone: "warning" };
+  }
+
   const today = format(new Date(), "yyyy-MM-dd");
 
   if (booking.checkIn && booking.checkout) {
     if (today < booking.checkIn) {
-      return { label: "Booked", tone: "warning" };
+      return { label: "Confirmed", tone: "success" };
     }
 
     if (today >= booking.checkIn && today < booking.checkout) {
-      return { label: "Hosting now", tone: "active" };
+      return { label: "Hosting", tone: "active" };
     }
 
     if (today >= booking.checkout) {
@@ -45,5 +53,14 @@ export function getBookingStatusState(
     }
   }
 
-  return { label: "Booked", tone: "warning" };
+  if (
+    rawStatus.includes("confirm") ||
+    rawStatus.includes("accept") ||
+    rawStatus.includes("booked") ||
+    rawStatus.includes("reserved")
+  ) {
+    return { label: "Confirmed", tone: "success" };
+  }
+
+  return { label: "Confirmed", tone: "success" };
 }

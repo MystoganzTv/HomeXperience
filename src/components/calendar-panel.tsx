@@ -16,6 +16,7 @@ import {
 } from "date-fns";
 import Link from "next/link";
 import { useState } from "react";
+import { BookingChannelBadge, BookingStatusBadge } from "@/components/booking-badges";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
 import { getBookingStatusState } from "@/lib/booking-status";
 import { Modal } from "@/components/modal";
@@ -378,21 +379,7 @@ export function CalendarPanel({
               const bookingStatus = getBookingStatusState(selectedBooking);
 
               return (
-                <div
-                  className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
-                    bookingStatus.tone === "active"
-                      ? "border-emerald-400/28 bg-emerald-400/10 text-emerald-100"
-                      : bookingStatus.tone === "success"
-                        ? "border-teal-300/24 bg-teal-300/[0.08] text-teal-100"
-                        : bookingStatus.tone === "danger"
-                          ? "border-rose-400/26 bg-rose-400/[0.08] text-rose-100"
-                          : bookingStatus.tone === "neutral"
-                            ? "border-white/10 bg-white/[0.04] text-slate-200"
-                            : "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                  }`}
-                >
-                  {bookingStatus.label}
-                </div>
+                <BookingStatusBadge status={bookingStatus} className="px-3 py-1.5 text-[11px]" />
               );
             })()}
 
@@ -438,7 +425,7 @@ export function CalendarPanel({
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[var(--workspace-muted)]">Channel</span>
-                    <span className="font-medium text-[var(--workspace-text)]">{selectedBooking.channel}</span>
+                    <BookingChannelBadge channel={selectedBooking.channel} />
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[var(--workspace-muted)]">Booking ref</span>
@@ -448,9 +435,7 @@ export function CalendarPanel({
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[var(--workspace-muted)]">Status</span>
-                    <span className="font-medium text-[var(--workspace-text)]">
-                      {getBookingStatusState(selectedBooking).label}
-                    </span>
+                    <BookingStatusBadge status={getBookingStatusState(selectedBooking)} />
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[var(--workspace-muted)]">Rental period</span>

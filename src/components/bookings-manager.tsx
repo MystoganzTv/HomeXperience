@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
+import { BookingChannelBadge, BookingStatusBadge } from "@/components/booking-badges";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
 import { WorkspaceDateField } from "@/components/workspace-date-field";
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/format";
@@ -219,21 +220,9 @@ export function BookingsManager({
                     <div>
                       <p className="font-medium text-[var(--workspace-text)]">{booking.guestName}</p>
                       <p className="mt-1 text-xs text-slate-400">{booking.rentalPeriod}</p>
-                      <p
-                        className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                          bookingStatus.tone === "active"
-                            ? "border-emerald-400/28 bg-emerald-400/10 text-emerald-100"
-                            : bookingStatus.tone === "success"
-                              ? "border-teal-300/24 bg-teal-300/[0.08] text-teal-100"
-                              : bookingStatus.tone === "danger"
-                                ? "border-rose-400/26 bg-rose-400/[0.08] text-rose-100"
-                                : bookingStatus.tone === "neutral"
-                                  ? "border-white/10 bg-white/[0.04] text-slate-200"
-                                  : "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                        }`}
-                      >
-                        {bookingStatus.label}
-                      </p>
+                      <div className="mt-2">
+                        <BookingStatusBadge status={bookingStatus} />
+                      </div>
                     </div>
                   </td>
                   <td className="py-4 pr-4">
@@ -243,7 +232,9 @@ export function BookingsManager({
                     {booking.bookingNumber || "Not set"}
                   </td>
                   <td className="py-4 pr-4">{formatNumber(booking.guestCount)}</td>
-                  <td className="py-4 pr-4">{booking.channel}</td>
+                  <td className="py-4 pr-4">
+                    <BookingChannelBadge channel={booking.channel} />
+                  </td>
                   <td className="py-4 pr-4">{formatCurrency(booking.totalRevenue, false, currencyCode)}</td>
                   <td className="py-4 pr-4">{formatCurrency(booking.payout, false, currencyCode)}</td>
                   <td className="py-4">
