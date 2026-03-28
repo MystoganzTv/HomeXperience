@@ -1,3 +1,4 @@
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import type {
   ImportValidationWarning,
   NormalizedImportBooking,
@@ -124,6 +125,42 @@ export function validateBookingRow({
         rowIndex,
       ),
     );
+  }
+
+  if (booking.checkIn && booking.checkOut) {
+    const checkInDate = parseISO(booking.checkIn);
+    const checkOutDate = parseISO(booking.checkOut);
+    const parsedNights = differenceInCalendarDays(checkOutDate, checkInDate);
+    const checkInYear = checkInDate.getUTCFullYear();
+    const checkOutYear = checkOutDate.getUTCFullYear();
+
+    if (checkInYear < 2000 || checkOutYear < 2000 || checkInYear > 2100 || checkOutYear > 2100) {
+      warnings.push(
+        buildIssue(
+          {
+            code: "implausible_dates",
+            message: "Stay dates look implausible. Review the imported dates before saving.",
+            severity: "error",
+          },
+          "booking",
+          rowIndex,
+        ),
+      );
+    }
+
+    if (parsedNights > 365) {
+      warnings.push(
+        buildIssue(
+          {
+            code: "suspicious_stay_length",
+            message: "Stay length looks unusually long. Review the imported dates before saving.",
+            severity: "error",
+          },
+          "booking",
+          rowIndex,
+        ),
+      );
+    }
   }
 
   if (malformedRequiredMoneyFields && malformedRequiredMoneyFields.length > 0) {

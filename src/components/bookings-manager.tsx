@@ -290,7 +290,7 @@ export function BookingsManager({
             </label>
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Guests</span>
-              <input className={inputClassName()} type="number" min="1" name="guestCount" defaultValue={editingBooking.guestCount} required />
+              <input className={inputClassName()} type="number" min="0" step="1" name="guestCount" defaultValue={editingBooking.guestCount} required />
             </label>
             <label className="space-y-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Channel</span>

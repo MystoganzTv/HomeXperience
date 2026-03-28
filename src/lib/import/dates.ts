@@ -23,6 +23,28 @@ function parseDateUsingPatterns(raw: string, patterns: string[]) {
   return null;
 }
 
+function buildDatePatterns(raw: string, ambiguous: boolean) {
+  const slashOrDashMatch = raw.match(/^(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})$/);
+
+  if (slashOrDashMatch) {
+    const separator = slashOrDashMatch[2];
+    const yearToken = slashOrDashMatch[4].length === 2 ? "yy" : "yyyy";
+    const dayFirstBase = [`d${separator}M${separator}${yearToken}`, `dd${separator}MM${separator}${yearToken}`];
+    const monthFirstBase = [`M${separator}d${separator}${yearToken}`, `MM${separator}dd${separator}${yearToken}`];
+
+    return ambiguous ? [...dayFirstBase, ...monthFirstBase] : [...monthFirstBase, ...dayFirstBase];
+  }
+
+  return [
+    "yyyy-MM-dd",
+    "dd-MM-yyyy",
+    "d MMM yyyy",
+    "d MMM yy",
+    "MMM d, yyyy",
+    "MMM d, yy",
+  ];
+}
+
 export function parseImportDateDetailed(value: ImportCellValue): ParsedImportDate {
   if (!value && value !== 0) {
     return {
@@ -69,20 +91,7 @@ export function parseImportDateDetailed(value: ImportCellValue): ParsedImportDat
     Number(ambiguousMatch[2]) <= 12 &&
     ambiguousMatch[1] !== ambiguousMatch[2];
 
-  const prioritizedPatterns = ambiguous
-    ? ["d/M/yyyy", "dd/MM/yyyy", "d/M/yy", "M/d/yyyy", "MM/dd/yyyy", "M/d/yy"]
-    : [
-        "M/d/yyyy",
-        "MM/dd/yyyy",
-        "d/M/yyyy",
-        "dd/MM/yyyy",
-        "M/d/yy",
-        "d/M/yy",
-        "yyyy-MM-dd",
-        "dd-MM-yyyy",
-        "MMM d, yyyy",
-        "d MMM yyyy",
-      ];
+  const prioritizedPatterns = buildDatePatterns(raw, ambiguous);
 
   const parsed = parseDateUsingPatterns(raw, prioritizedPatterns);
   if (parsed) {

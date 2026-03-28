@@ -4,7 +4,7 @@ export const genericBookingColumns = {
   checkIn: ["checkin", "checkindate", "arrival", "fechadeinicio", "fechaentrada"],
   checkOut: ["checkout", "checkoutdate", "departure", "fechadefinalizacion", "fechadesalida"],
   guestName: ["guestname", "guest", "name", "huesped", "nombredelhuesped"],
-  guests: ["ofguests", "guests", "guestcount", "numberofguests", "numerodehuespedes"],
+  guests: ["ofguests", "guests", "guestcount", "numberofguests", "numerodehuespedes", "numerohuespedes", "huespedes", "nodehuespedes", "ndehuespedes"],
   channel: ["channel", "source", "canal", "fuente"],
   rentalPeriod: ["rentalperiod", "staylength", "estancia", "periododealquiler"],
   totalRevenue: ["totalrevenue", "grossrevenue", "ingresototal", "ingresobruto"],
@@ -118,7 +118,7 @@ export const airbnbBookingColumns = {
     "comision",
   ],
   cleaningFee: ["cleaningfee", "cleaning", "tarifadelimpieza", "limpieza"],
-  guests: ["guests", "guestcount", "numberofguests", "numerodehuespedes"],
+  guests: ["guests", "guestcount", "numberofguests", "numerodehuespedes", "numerohuespedes", "huespedes", "nodehuespedes", "ndehuespedes"],
   status: ["status", "reservationstatus", "estado"],
   currency: ["currency", "currencycode", "moneda"],
 } as const;
@@ -174,7 +174,7 @@ export const bookingComBookingColumns = {
   ],
   platformFee: ["commission", "commissionamount", "platformfee", "bookingcommission", "comision"],
   cleaningFee: ["cleaningfee", "cleaning", "cleaningcharge", "limpieza", "tarifadelimpieza"],
-  guests: ["guests", "guestcount", "numberofguests", "occupancy", "numerodehuespedes"],
+  guests: ["guests", "guestcount", "numberofguests", "occupancy", "numerodehuespedes", "numerohuespedes", "huespedes", "nodehuespedes", "ndehuespedes"],
   status: ["status", "reservationstatus", "bookingstatus", "estado"],
   currency: ["currency", "currencycode", "moneda"],
 } as const;

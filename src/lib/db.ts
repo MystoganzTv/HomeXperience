@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { Pool } from "pg";
+import { differenceInCalendarDays, formatISO, isValid, parseISO, setYear } from "date-fns";
 import type {
   AdminUserSummary,
   BookingRecord,
@@ -839,6 +840,30 @@ function mapImportSummary(row: Record<string, unknown>): ImportSummary {
 }
 
 function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
+  const rawCheckIn = String(getRowValue(row, "checkIn", "checkin"));
+  const rawCheckOut = String(getRowValue(row, "checkout"));
+  const normalizedCheckOut = repairLegacyBookingDate(rawCheckOut);
+  const normalizedCheckIn = repairLegacyBookingDate(
+    rawCheckIn,
+    normalizedCheckOut || rawCheckOut,
+  );
+  const derivedNights = calculateBookingNights(normalizedCheckIn, normalizedCheckOut);
+  const storedNights = Number(getRowValue(row, "nights"));
+  const rentalRevenue = Number(getRowValue(row, "rentalRevenue", "rentalrevenue"));
+  const normalizedNights =
+    derivedNights > 0 && (storedNights <= 0 || storedNights > 365 || Math.abs(storedNights - derivedNights) > 3)
+      ? derivedNights
+      : storedNights;
+  const storedPricePerNight = Number(getRowValue(row, "pricePerNight", "pricepernight"));
+  const normalizedPricePerNight =
+    normalizedNights > 0 &&
+    (!Number.isFinite(storedPricePerNight) ||
+      storedPricePerNight <= 0 ||
+      storedPricePerNight < 1 / 1000 ||
+      (rentalRevenue > 0 && Math.abs(storedPricePerNight * normalizedNights - rentalRevenue) > Math.max(1, rentalRevenue * 0.05)))
+      ? rentalRevenue / normalizedNights
+      : storedPricePerNight;
+
   return {
     id: Number(getRowValue(row, "id")),
     importId: Number(getRowValue(row, "importId", "importid")),
@@ -848,26 +873,73 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     ) as ImportedFileSource,
     propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
     unitName: String(getRowValue(row, "unitName", "unitname")),
-    checkIn: String(getRowValue(row, "checkIn", "checkin")),
-    checkout: String(getRowValue(row, "checkout")),
+    checkIn: normalizedCheckIn,
+    checkout: normalizedCheckOut,
     guestName: String(getRowValue(row, "guestName", "guestname")),
     guestCount: Number(getRowValue(row, "guestCount", "guestcount")),
     channel: String(getRowValue(row, "channel")),
-    rentalPeriod: String(getRowValue(row, "rentalPeriod", "rentalperiod")),
-    pricePerNight: Number(getRowValue(row, "pricePerNight", "pricepernight")),
+    rentalPeriod: normalizedNights > 0 ? `${normalizedNights} nights` : String(getRowValue(row, "rentalPeriod", "rentalperiod")),
+    pricePerNight: normalizedPricePerNight,
     extraFee: Number(getRowValue(row, "extraFee", "extrafee")),
     discount: Number(getRowValue(row, "discount")),
-    rentalRevenue: Number(getRowValue(row, "rentalRevenue", "rentalrevenue")),
+    rentalRevenue,
     cleaningFee: Number(getRowValue(row, "cleaningFee", "cleaningfee")),
     totalRevenue: Number(getRowValue(row, "totalRevenue", "totalrevenue")),
     hostFee: Number(getRowValue(row, "hostFee", "hostfee")),
     payout: Number(getRowValue(row, "payout")),
-    nights: Number(getRowValue(row, "nights")),
+    nights: normalizedNights,
     bookingNumber: String(getRowValue(row, "bookingNumber", "bookingnumber") ?? ""),
     overbookingStatus: String(
       getRowValue(row, "overbookingStatus", "overbookingstatus") ?? "",
     ),
   };
+}
+
+function repairLegacyBookingDate(value: string, relatedDate?: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const parsed = parseISO(trimmed);
+  if (!isValid(parsed)) {
+    return trimmed;
+  }
+
+  const year = parsed.getUTCFullYear();
+  if (year >= 2000) {
+    return trimmed;
+  }
+
+  const related = relatedDate ? parseISO(relatedDate) : null;
+  let targetYear = 2000 + year;
+
+  if (related && isValid(related) && related.getUTCFullYear() >= 2000) {
+    targetYear = related.getUTCFullYear();
+    const sameYearDate = setYear(parsed, targetYear);
+
+    if (isValid(sameYearDate) && sameYearDate > related) {
+      targetYear -= 1;
+    }
+  }
+
+  return formatISO(setYear(parsed, targetYear), { representation: "date" });
+}
+
+function calculateBookingNights(checkIn: string, checkOut: string) {
+  if (!checkIn || !checkOut) {
+    return 0;
+  }
+
+  const checkInDate = parseISO(checkIn);
+  const checkOutDate = parseISO(checkOut);
+
+  if (!isValid(checkInDate) || !isValid(checkOutDate)) {
+    return 0;
+  }
+
+  return differenceInCalendarDays(checkOutDate, checkInDate);
 }
 
 function mapExpenseRecord(row: Record<string, unknown>): ExpenseRecord {
