@@ -84,6 +84,7 @@ export function WorkspaceDateField({
   const initialMonth = initialMonthValue ? parseISO(initialMonthValue) : new Date();
   const [visibleMonth, setVisibleMonth] = useState(startOfMonth(initialMonth));
   const [isOpen, setIsOpen] = useState(false);
+  const [activePicker, setActivePicker] = useState<"month" | "year" | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -137,6 +138,7 @@ export function WorkspaceDateField({
       setInternalValue(nextValue);
     }
     setVisibleMonth(startOfMonth(nextDate));
+    setActivePicker(null);
     setIsOpen(false);
   }
 
@@ -146,6 +148,7 @@ export function WorkspaceDateField({
     } else {
       setInternalValue("");
     }
+    setActivePicker(null);
     setIsOpen(false);
   }
 
@@ -160,7 +163,17 @@ export function WorkspaceDateField({
 
       <button
         type="button"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          setIsOpen((current) => {
+            const nextOpen = !current;
+
+            if (!nextOpen) {
+              setActivePicker(null);
+            }
+
+            return nextOpen;
+          });
+        }}
         className={`input-surface flex w-full items-center justify-between rounded-2xl text-left text-sm ${
           compact ? "min-w-[170px] px-4 py-3" : "px-4 py-3"
         }`}
@@ -176,51 +189,47 @@ export function WorkspaceDateField({
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => setVisibleMonth((current) => subMonths(current, 1))}
+              onClick={() => {
+                setActivePicker(null);
+                setVisibleMonth((current) => subMonths(current, 1));
+              }}
               className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
               aria-label="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <div className="flex items-center gap-2">
-              <select
+              <button
+                type="button"
                 aria-label="Select month"
-                value={String(getMonth(visibleMonth))}
-                onChange={(event) => {
-                  const nextMonth = Number(event.target.value);
-                  setVisibleMonth(
-                    new Date(getYear(visibleMonth), nextMonth, 1),
-                  );
-                }}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:bg-white/[0.08] focus:border-[var(--workspace-accent)]/50"
+                onClick={() => setActivePicker((current) => (current === "month" ? null : "month"))}
+                className={`rounded-2xl border px-3 py-2 text-sm font-semibold text-white outline-none transition ${
+                  activePicker === "month"
+                    ? "border-[var(--workspace-accent)]/45 bg-[var(--workspace-accent)]/12"
+                    : "border-white/10 bg-white/[0.04] hover:bg-white/[0.08]"
+                }`}
               >
-                {calendarMonthOptions.map((month) => (
-                  <option key={month.value} value={month.value} className="bg-slate-950 text-slate-100">
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-              <select
+                {format(visibleMonth, "MMMM")}
+              </button>
+              <button
+                type="button"
                 aria-label="Select year"
-                value={String(getYear(visibleMonth))}
-                onChange={(event) => {
-                  const nextYear = Number(event.target.value);
-                  setVisibleMonth(
-                    new Date(nextYear, getMonth(visibleMonth), 1),
-                  );
-                }}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:bg-white/[0.08] focus:border-[var(--workspace-accent)]/50"
+                onClick={() => setActivePicker((current) => (current === "year" ? null : "year"))}
+                className={`rounded-2xl border px-3 py-2 text-sm font-semibold text-white outline-none transition ${
+                  activePicker === "year"
+                    ? "border-[var(--workspace-accent)]/45 bg-[var(--workspace-accent)]/12"
+                    : "border-white/10 bg-white/[0.04] hover:bg-white/[0.08]"
+                }`}
               >
-                {yearOptions.map((year) => (
-                  <option key={year} value={year} className="bg-slate-950 text-slate-100">
-                    {year}
-                  </option>
-                ))}
-              </select>
+                {format(visibleMonth, "yyyy")}
+              </button>
             </div>
             <button
               type="button"
-              onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
+              onClick={() => {
+                setActivePicker(null);
+                setVisibleMonth((current) => addMonths(current, 1));
+              }}
               className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
               aria-label="Next month"
             >
@@ -228,36 +237,92 @@ export function WorkspaceDateField({
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-7 gap-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
+          {activePicker === "month" ? (
+            <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.025] p-3">
+              <div className="grid grid-cols-3 gap-2">
+                {calendarMonthOptions.map((month) => {
+                  const isActive = month.value === getMonth(visibleMonth);
 
-          <div className="mt-3 grid grid-cols-7 gap-2">
-            {calendarDays.map((day) => {
-              const selected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const currentMonth = isSameMonth(day, visibleMonth);
-              const today = isToday(day);
+                  return (
+                    <button
+                      key={month.value}
+                      type="button"
+                      onClick={() => {
+                        setVisibleMonth(new Date(getYear(visibleMonth), month.value, 1));
+                        setActivePicker(null);
+                      }}
+                      className={`rounded-2xl px-3 py-3 text-sm font-medium transition ${
+                        isActive
+                          ? "bg-[var(--workspace-accent)] text-slate-950 shadow-[0_12px_30px_rgba(88,196,182,0.28)]"
+                          : "bg-white/[0.03] text-[var(--workspace-text)] hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {month.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : activePicker === "year" ? (
+            <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.025] p-3">
+              <div className="grid max-h-[228px] grid-cols-3 gap-2 overflow-y-auto pr-1">
+                {yearOptions.map((year) => {
+                  const isActive = year === getYear(visibleMonth);
 
-              return (
-                <button
-                  key={day.toISOString()}
-                  type="button"
-                  onClick={() => chooseDate(day)}
-                  className={`flex h-10 items-center justify-center rounded-2xl text-sm transition ${
-                    selected
-                      ? "bg-[var(--workspace-accent)] text-slate-950 shadow-[0_12px_30px_rgba(88,196,182,0.28)]"
-                      : currentMonth
-                        ? "bg-white/[0.03] text-[var(--workspace-text)] hover:bg-white/[0.08]"
-                        : "bg-transparent text-slate-600 hover:bg-white/[0.04]"
-                  } ${today && !selected ? "ring-1 ring-[var(--workspace-accent)]/40" : ""}`}
-                >
-                  {format(day, "d")}
-                </button>
-              );
-            })}
-          </div>
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      onClick={() => {
+                        setVisibleMonth(new Date(year, getMonth(visibleMonth), 1));
+                        setActivePicker(null);
+                      }}
+                      className={`rounded-2xl px-3 py-3 text-sm font-medium transition ${
+                        isActive
+                          ? "bg-[var(--workspace-accent)] text-slate-950 shadow-[0_12px_30px_rgba(88,196,182,0.28)]"
+                          : "bg-white/[0.03] text-[var(--workspace-text)] hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid grid-cols-7 gap-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="mt-3 grid grid-cols-7 gap-2">
+                {calendarDays.map((day) => {
+                  const selected = selectedDate ? isSameDay(day, selectedDate) : false;
+                  const currentMonth = isSameMonth(day, visibleMonth);
+                  const today = isToday(day);
+
+                  return (
+                    <button
+                      key={day.toISOString()}
+                      type="button"
+                      onClick={() => chooseDate(day)}
+                      className={`flex h-10 items-center justify-center rounded-2xl text-sm transition ${
+                        selected
+                          ? "bg-[var(--workspace-accent)] text-slate-950 shadow-[0_12px_30px_rgba(88,196,182,0.28)]"
+                          : currentMonth
+                            ? "bg-white/[0.03] text-[var(--workspace-text)] hover:bg-white/[0.08]"
+                            : "bg-transparent text-slate-600 hover:bg-white/[0.04]"
+                      } ${today && !selected ? "ring-1 ring-[var(--workspace-accent)]/40" : ""}`}
+                    >
+                      {format(day, "d")}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/8 pt-4">
             <button
