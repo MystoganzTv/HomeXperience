@@ -1,4 +1,10 @@
-import type { BookingRecord, ExpenseRecord, ImportedFileSource } from "@/lib/types";
+import type {
+  BookingRecord,
+  CalendarEventRecord,
+  ExpenseRecord,
+  ImportedFileSource,
+} from "@/lib/types";
+import { matchBookingsToCalendar } from "./calendarMatch";
 import { detectDuplicateBookings } from "./dedupe";
 import { detectSource } from "./detectSource";
 import { extractFinancialStatement } from "./financialStatement";
@@ -35,6 +41,7 @@ function describeBookingCandidate(
   row: ImportBookingCandidate,
   section: ImportReviewSection,
 ): ImportReviewRow {
+  const matchReason = row.calendarMatch?.message;
   return {
     id: `booking-${row.rowIndex}`,
     rowType: "booking",
@@ -45,7 +52,12 @@ function describeBookingCandidate(
     reasons:
       section === "duplicates" && row.duplicate
         ? [row.duplicate.message, ...row.warnings.map((warning) => warning.message)]
-        : row.warnings.map((warning) => warning.message),
+        : section === "conflicts" && matchReason
+          ? [matchReason, ...row.warnings.map((warning) => warning.message)]
+          : [
+              ...(matchReason && section === "warnings" ? [matchReason] : []),
+              ...row.warnings.map((warning) => warning.message),
+            ],
     canResolve: section !== "valid",
     booking:
       section === "valid"
@@ -86,6 +98,10 @@ function describeExpenseCandidate(
 function categorizeBookingCandidate(candidate: ImportBookingCandidate): ImportReviewSection {
   if (hasBlockingIssues(candidate.warnings)) {
     return "errors";
+  }
+
+  if (candidate.calendarMatch?.matchType === "blocked_conflict") {
+    return "conflicts";
   }
 
   if (candidate.duplicate) {
@@ -425,7 +441,9 @@ export function buildImportPreview(
   buffer: ArrayBuffer,
   fileName: string,
   existingBookings: BookingRecord[] = [],
+  existingCalendarEvents: CalendarEventRecord[] = [],
   options?: {
+    propertyName?: string;
     manualMapping?: ImportManualMapping | null;
     rowResolutions?: ImportRowResolution[];
   },
@@ -454,6 +472,9 @@ export function buildImportPreview(
       validRows: statement ? 1 : 0,
       warningRows: 0,
       duplicateRows: 0,
+      matchedRows: 0,
+      conflictRows: 0,
+      newRows: 0,
       errorRows: 0,
       skippedRows: 0,
       expensesDetected: 0,
@@ -466,6 +487,7 @@ export function buildImportPreview(
         valid: [],
         warnings: [],
         duplicates: [],
+        conflicts: [],
         errors: [],
       },
       warnings: [
@@ -478,6 +500,7 @@ export function buildImportPreview(
         },
       ],
       duplicates: [],
+      calendarMatches: [],
       canImport: Boolean(statement),
     };
   }
@@ -495,6 +518,9 @@ export function buildImportPreview(
       validRows: 0,
       warningRows: 0,
       duplicateRows: 0,
+      matchedRows: 0,
+      conflictRows: 0,
+      newRows: 0,
       errorRows: 0,
       skippedRows: 0,
       expensesDetected: 0,
@@ -507,6 +533,7 @@ export function buildImportPreview(
         valid: [],
         warnings: [],
         duplicates: [],
+        conflicts: [],
         errors: [],
       },
       warnings: [
@@ -520,6 +547,7 @@ export function buildImportPreview(
         },
       ],
       duplicates: [],
+      calendarMatches: [],
       canImport: false,
     };
   }
@@ -607,18 +635,36 @@ export function buildImportPreview(
 
       return candidate;
     });
+  const bookingsWithProperty = resolvedBookings.map((candidate) => ({
+    ...candidate,
+    booking: {
+      ...candidate.booking,
+      propertyName: candidate.booking.propertyName || options?.propertyName || "",
+    },
+  }));
 
-  const duplicateFlags = detectDuplicateBookings(resolvedBookings, existingBookings);
+  const { bookings: matchedBookings, calendarMatches } = matchBookingsToCalendar(
+    bookingsWithProperty,
+    existingCalendarEvents,
+  );
+  const duplicateFlags = detectDuplicateBookings(matchedBookings, existingBookings);
   const duplicatesByRowIndex = new Map(duplicateFlags.map((duplicate) => [duplicate.rowIndex, duplicate]));
-  const bookingRows = resolvedBookings.map((candidate) => ({
+  const bookingRows = matchedBookings.map((candidate) => ({
     ...candidate,
     duplicate: duplicatesByRowIndex.get(candidate.rowIndex),
+    rowStatus:
+      candidate.calendarMatch?.matchType === "blocked_conflict"
+        ? "conflict"
+        : duplicatesByRowIndex.has(candidate.rowIndex)
+          ? "duplicate"
+          : candidate.rowStatus ?? "new",
   }));
 
   const reviewRows: Record<ImportReviewSection, ImportReviewRow[]> = {
     valid: [],
     warnings: [],
     duplicates: [],
+    conflicts: [],
     errors: [],
   };
 
@@ -635,8 +681,11 @@ export function buildImportPreview(
   const validRows = reviewRows.valid.length;
   const warningRows = reviewRows.warnings.length;
   const duplicateRows = reviewRows.duplicates.length;
+  const conflictRows = reviewRows.conflicts.length;
   const errorRows = reviewRows.errors.length;
   const importableRows = validRows + warningRows + duplicateRows;
+  const matchedRows = bookingRows.filter((row) => row.rowStatus === "matched").length;
+  const newRows = bookingRows.filter((row) => row.rowStatus === "new").length;
 
   return {
     source,
@@ -650,6 +699,9 @@ export function buildImportPreview(
     validRows,
     warningRows,
     duplicateRows,
+    matchedRows,
+    conflictRows,
+    newRows,
     errorRows,
     skippedRows: normalized.skippedRows,
     expensesDetected: normalized.expenses.length,
@@ -667,6 +719,7 @@ export function buildImportPreview(
         checkOut: row.booking.checkOut,
         grossRevenue: row.booking.grossRevenue,
         payout: row.booking.payout,
+        status: row.rowStatus ?? "new",
       })),
     reviewRows,
     warnings: [
@@ -674,6 +727,7 @@ export function buildImportPreview(
       ...normalized.expenses.flatMap((row) => row.warnings),
     ],
     duplicates: duplicateFlags,
+    calendarMatches,
     canImport: importableRows > 0,
   };
 }
@@ -708,29 +762,41 @@ export function mapPreviewToHostlyxRecords(
     importedSource: mapDetectedSourceToStoredSource(preview.source),
     bookings: preview.bookings
       .filter((row) => !hasBlockingIssues(row.warnings))
+      .filter((row) => row.rowStatus !== "conflict")
       .filter((row) => duplicateStrategy === "import" || !row.duplicate)
-      .map(({ booking }) => ({
+      .map((row) => ({
+        propertyId: row.booking.propertyId ?? null,
         propertyName,
-        unitName: booking.propertyName,
+        unitName: row.booking.propertyName,
         importedSource: mapDetectedSourceToStoredSource(preview.source),
-        checkIn: booking.checkIn,
-        checkout: booking.checkOut,
-        guestName: booking.guestName || "Guest",
-        guestCount: booking.guests,
-        channel: booking.channel,
-        rentalPeriod: `${booking.nights} nights`,
-        pricePerNight: booking.nights > 0 ? booking.grossRevenue / booking.nights : booking.grossRevenue,
+        checkIn: row.booking.checkIn,
+        checkout: row.booking.checkOut,
+        guestName: row.booking.guestName || "Guest",
+        guestCount: row.booking.guests,
+        channel: row.booking.channel,
+        rentalPeriod: `${row.booking.nights} nights`,
+        pricePerNight:
+          row.booking.nights > 0
+            ? row.booking.grossRevenue / row.booking.nights
+            : row.booking.grossRevenue,
         extraFee: 0,
         discount: 0,
-        rentalRevenue: booking.grossRevenue,
-        cleaningFee: booking.cleaningFee,
-        taxAmount: booking.taxAmount,
-        totalRevenue: booking.grossRevenue,
-        hostFee: booking.platformFee,
-        payout: booking.payout,
-        nights: booking.nights,
-        bookingNumber: booking.bookingReference,
-        overbookingStatus: booking.status,
+        rentalRevenue: row.booking.grossRevenue,
+        cleaningFee: row.booking.cleaningFee,
+        taxAmount: row.booking.taxAmount,
+        totalRevenue: row.booking.grossRevenue,
+        hostFee: row.booking.platformFee,
+        payout: row.booking.payout,
+        nights: row.booking.nights,
+        bookingNumber: row.booking.bookingReference,
+        overbookingStatus: row.booking.status,
+        matchStatus:
+          row.rowStatus === "conflict"
+            ? "conflict_blocked_calendar"
+            : row.rowStatus === "matched"
+              ? "matched_to_calendar"
+              : "unmatched",
+        matchedCalendarEventId: row.calendarMatch?.calendarEventId ?? null,
       })),
     expenses: preview.expenses
       .filter((row) => !hasBlockingIssues(row.warnings))

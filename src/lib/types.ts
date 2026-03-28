@@ -5,6 +5,12 @@ export type ImportedFileSource =
   | "generic_excel"
   | "hostlyx_excel"
   | "financial_statement";
+export type BookingMatchStatus =
+  | "unmatched"
+  | "matched_to_calendar"
+  | "conflict_blocked_calendar";
+export type CalendarEventSource = "airbnb" | "booking" | "vrbo" | "other";
+export type CalendarEventType = "booking" | "blocked" | "unknown";
 export type CurrencyCode = "USD" | "EUR" | "GBP";
 export type CountryCode = "US" | "ES" | "GB";
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "portfolio";
@@ -27,6 +33,7 @@ export type BookingRecord = {
   importId?: number;
   source?: ImportSource;
   importedSource?: ImportedFileSource;
+  propertyId?: number | null;
   propertyName: string;
   unitName: string;
   checkIn: string;
@@ -47,6 +54,8 @@ export type BookingRecord = {
   nights: number;
   bookingNumber: string;
   overbookingStatus: string;
+  matchStatus?: BookingMatchStatus;
+  matchedCalendarEventId?: number | null;
 };
 
 export type ExpenseRecord = {
@@ -74,6 +83,21 @@ export type CalendarClosureRecord = {
   statusLabel: string;
   guestCount: number;
   nights: number;
+};
+
+export type CalendarEventRecord = {
+  id?: number;
+  importId?: number;
+  propertyId?: number | null;
+  propertyName: string;
+  source: CalendarEventSource;
+  externalEventId: string;
+  summary: string;
+  startDate: string;
+  endDate: string;
+  eventType: CalendarEventType;
+  linkedBookingId?: number | null;
+  lastSyncedAt: string;
 };
 
 export type ImportSummary = {

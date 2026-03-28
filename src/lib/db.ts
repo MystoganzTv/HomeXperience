@@ -6,6 +6,10 @@ import { differenceInCalendarDays, formatISO, isValid, parseISO, setYear } from 
 import type {
   AdminUserSummary,
   BookingRecord,
+  BookingMatchStatus,
+  CalendarEventRecord,
+  CalendarEventSource,
+  CalendarEventType,
   CalendarClosureRecord,
   CountryCode,
   ExpenseRecord,
@@ -44,6 +48,10 @@ type StoredImport = ImportSummary & {
 };
 
 type StoredBooking = Required<BookingRecord> & {
+  ownerEmail: string;
+};
+
+type StoredCalendarEvent = Required<CalendarEventRecord> & {
   ownerEmail: string;
 };
 
@@ -106,6 +114,7 @@ type MemoryStore = {
   nextBookingId: number;
   nextExpenseId: number;
   nextClosureId: number;
+  nextCalendarEventId: number;
   nextFinancialDocumentId: number;
   nextPropertyId: number;
   nextPropertyUnitId: number;
@@ -113,6 +122,7 @@ type MemoryStore = {
   bookings: StoredBooking[];
   expenses: StoredExpense[];
   closures: StoredCalendarClosure[];
+  calendarEvents: StoredCalendarEvent[];
   financialDocuments: StoredFinancialDocument[];
   settings: StoredUserSettings[];
   authUsers: StoredAuthUser[];
@@ -178,6 +188,7 @@ function getMemoryStore() {
       nextBookingId: 1,
       nextExpenseId: 1,
       nextClosureId: 1,
+      nextCalendarEventId: 1,
       nextFinancialDocumentId: 1,
       nextPropertyId: 1,
       nextPropertyUnitId: 1,
@@ -185,6 +196,7 @@ function getMemoryStore() {
       bookings: [],
       expenses: [],
       closures: [],
+      calendarEvents: [],
       financialDocuments: [],
       settings: [],
       authUsers: [],
@@ -204,6 +216,14 @@ function getMemoryStore() {
 
   if (!globalThis.__hostlyxMemoryStore.financialDocuments) {
     globalThis.__hostlyxMemoryStore.financialDocuments = [];
+  }
+
+  if (!globalThis.__hostlyxMemoryStore.calendarEvents) {
+    globalThis.__hostlyxMemoryStore.calendarEvents = [];
+  }
+
+  if (!globalThis.__hostlyxMemoryStore.nextCalendarEventId) {
+    globalThis.__hostlyxMemoryStore.nextCalendarEventId = 1;
   }
 
   if (!globalThis.__hostlyxMemoryStore.nextFinancialDocumentId) {
@@ -248,6 +268,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       import_id INTEGER NOT NULL,
       source TEXT NOT NULL DEFAULT 'upload',
       imported_source TEXT NOT NULL DEFAULT 'generic_excel',
+      property_id INTEGER,
       property_name TEXT NOT NULL DEFAULT 'Default Property',
       unit_name TEXT NOT NULL DEFAULT '',
       check_in TEXT NOT NULL,
@@ -267,7 +288,9 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       payout REAL NOT NULL,
       nights INTEGER NOT NULL,
       booking_number TEXT NOT NULL DEFAULT '',
-      overbooking_status TEXT NOT NULL DEFAULT ''
+      overbooking_status TEXT NOT NULL DEFAULT '',
+      match_status TEXT NOT NULL DEFAULT 'unmatched',
+      matched_calendar_event_id INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS expenses (
@@ -297,6 +320,22 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       status_label TEXT NOT NULL DEFAULT 'Closed',
       guest_count INTEGER NOT NULL DEFAULT 0,
       nights INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_email TEXT NOT NULL DEFAULT 'legacy',
+      import_id INTEGER NOT NULL DEFAULT 0,
+      property_id INTEGER,
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      source TEXT NOT NULL DEFAULT 'other',
+      external_event_id TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      event_type TEXT NOT NULL DEFAULT 'unknown',
+      linked_booking_id INTEGER,
+      last_synced_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS financial_documents (
@@ -379,6 +418,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
     CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
     CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_owner_start ON calendar_events(owner_email, start_date);
     CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_import ON financial_documents(owner_email, import_id);
     CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_period ON financial_documents(owner_email, period_start, period_end);
     CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
@@ -448,6 +488,10 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE bookings ADD COLUMN imported_source TEXT NOT NULL DEFAULT 'generic_excel';");
   }
 
+  if (!hasColumn(db, "bookings", "property_id")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN property_id INTEGER;");
+  }
+
   if (!hasColumn(db, "bookings", "property_name")) {
     db.exec("ALTER TABLE bookings ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
   }
@@ -466,6 +510,14 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "bookings", "tax_amount")) {
     db.exec("ALTER TABLE bookings ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "bookings", "match_status")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN match_status TEXT NOT NULL DEFAULT 'unmatched';");
+  }
+
+  if (!hasColumn(db, "bookings", "matched_calendar_event_id")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN matched_calendar_event_id INTEGER;");
   }
 
   if (!hasColumn(db, "imports", "imported_source")) {
@@ -526,6 +578,72 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "calendar_closures", "nights")) {
     db.exec("ALTER TABLE calendar_closures ADD COLUMN nights INTEGER NOT NULL DEFAULT 0;");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_email TEXT NOT NULL DEFAULT 'legacy',
+      import_id INTEGER NOT NULL DEFAULT 0,
+      property_id INTEGER,
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      source TEXT NOT NULL DEFAULT 'other',
+      external_event_id TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      event_type TEXT NOT NULL DEFAULT 'unknown',
+      linked_booking_id INTEGER,
+      last_synced_at TEXT NOT NULL
+    );
+  `);
+
+  if (!hasColumn(db, "calendar_events", "owner_email")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "import_id")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN import_id INTEGER NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "calendar_events", "property_id")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN property_id INTEGER;");
+  }
+
+  if (!hasColumn(db, "calendar_events", "property_name")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "source")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN source TEXT NOT NULL DEFAULT 'other';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "external_event_id")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN external_event_id TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "summary")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN summary TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "start_date")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN start_date TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "end_date")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN end_date TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "event_type")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN event_type TEXT NOT NULL DEFAULT 'unknown';");
+  }
+
+  if (!hasColumn(db, "calendar_events", "linked_booking_id")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN linked_booking_id INTEGER;");
+  }
+
+  if (!hasColumn(db, "calendar_events", "last_synced_at")) {
+    db.exec("ALTER TABLE calendar_events ADD COLUMN last_synced_at TEXT NOT NULL DEFAULT '';");
   }
 
   if (!hasColumn(db, "financial_documents", "owner_email")) {
@@ -651,6 +769,7 @@ async function initializePostgresSchema() {
           import_id BIGINT NOT NULL DEFAULT 0,
           source TEXT NOT NULL DEFAULT 'upload',
           imported_source TEXT NOT NULL DEFAULT 'generic_excel',
+          property_id BIGINT,
           property_name TEXT NOT NULL DEFAULT 'Default Property',
           unit_name TEXT NOT NULL DEFAULT '',
           check_in TEXT NOT NULL,
@@ -669,7 +788,9 @@ async function initializePostgresSchema() {
           payout DOUBLE PRECISION NOT NULL,
           nights INTEGER NOT NULL,
           booking_number TEXT NOT NULL DEFAULT '',
-          overbooking_status TEXT NOT NULL DEFAULT ''
+          overbooking_status TEXT NOT NULL DEFAULT '',
+          match_status TEXT NOT NULL DEFAULT 'unmatched',
+          matched_calendar_event_id BIGINT
         );
 
         CREATE TABLE IF NOT EXISTS expenses (
@@ -699,6 +820,22 @@ async function initializePostgresSchema() {
           status_label TEXT NOT NULL DEFAULT 'Closed',
           guest_count INTEGER NOT NULL DEFAULT 0,
           nights INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS calendar_events (
+          id BIGSERIAL PRIMARY KEY,
+          owner_email TEXT NOT NULL,
+          import_id BIGINT NOT NULL DEFAULT 0,
+          property_id BIGINT,
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
+          source TEXT NOT NULL DEFAULT 'other',
+          external_event_id TEXT NOT NULL DEFAULT '',
+          summary TEXT NOT NULL DEFAULT '',
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          event_type TEXT NOT NULL DEFAULT 'unknown',
+          linked_booking_id BIGINT,
+          last_synced_at TIMESTAMPTZ NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS financial_documents (
@@ -781,6 +918,7 @@ async function initializePostgresSchema() {
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
         CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+        CREATE INDEX IF NOT EXISTS idx_calendar_events_owner_start ON calendar_events(owner_email, start_date);
         CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_import ON financial_documents(owner_email, import_id);
         CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_period ON financial_documents(owner_email, period_start, period_end);
         CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
@@ -854,6 +992,10 @@ async function initializePostgresSchema() {
         ADD COLUMN IF NOT EXISTS imported_source TEXT NOT NULL DEFAULT 'generic_excel'
       `);
       await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS property_id BIGINT
+      `);
+      await pool.query(`
         ALTER TABLE imports
         ADD COLUMN IF NOT EXISTS workbook_hash TEXT NOT NULL DEFAULT ''
       `);
@@ -890,6 +1032,14 @@ async function initializePostgresSchema() {
         ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION NOT NULL DEFAULT 0
       `);
       await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS match_status TEXT NOT NULL DEFAULT 'unmatched'
+      `);
+      await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS matched_calendar_event_id BIGINT
+      `);
+      await pool.query(`
         ALTER TABLE expenses
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
       `);
@@ -916,6 +1066,54 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE calendar_closures
         ADD COLUMN IF NOT EXISTS nights INTEGER NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'legacy'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS import_id BIGINT NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS property_id BIGINT
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'other'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS external_event_id TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS start_date TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS end_date TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS event_type TEXT NOT NULL DEFAULT 'unknown'
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS linked_booking_id BIGINT
+      `);
+      await pool.query(`
+        ALTER TABLE calendar_events
+        ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       `);
       await pool.query(`
         ALTER TABLE financial_documents
@@ -1040,6 +1238,7 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     importedSource: String(
       getRowValue(row, "importedSource", "importedsource") ?? "generic_excel",
     ) as ImportedFileSource,
+    propertyId: Number(getRowValue(row, "propertyId", "propertyid")) || null,
     propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
     unitName: String(getRowValue(row, "unitName", "unitname")),
     checkIn: normalizedCheckIn,
@@ -1062,6 +1261,11 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     overbookingStatus: String(
       getRowValue(row, "overbookingStatus", "overbookingstatus") ?? "",
     ),
+    matchStatus: String(
+      getRowValue(row, "matchStatus", "matchstatus") ?? "unmatched",
+    ) as BookingMatchStatus,
+    matchedCalendarEventId:
+      Number(getRowValue(row, "matchedCalendarEventId", "matchedcalendareventid")) || null,
   };
 }
 
@@ -1174,6 +1378,26 @@ function mapFinancialDocumentRecord(row: Record<string, unknown>): FinancialDocu
   };
 }
 
+function mapCalendarEventRecord(row: Record<string, unknown>): CalendarEventRecord {
+  return {
+    id: Number(getRowValue(row, "id")),
+    importId: Number(getRowValue(row, "importId", "importid")),
+    propertyId: Number(getRowValue(row, "propertyId", "propertyid")) || null,
+    propertyName: String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    source: String(getRowValue(row, "source") ?? "other") as CalendarEventSource,
+    externalEventId: String(getRowValue(row, "externalEventId", "externaleventid") ?? ""),
+    summary: String(getRowValue(row, "summary") ?? ""),
+    startDate: String(getRowValue(row, "startDate", "startdate") ?? ""),
+    endDate: String(getRowValue(row, "endDate", "enddate") ?? ""),
+    eventType: String(getRowValue(row, "eventType", "eventtype") ?? "unknown") as CalendarEventType,
+    linkedBookingId: Number(getRowValue(row, "linkedBookingId", "linkedbookingid")) || null,
+    lastSyncedAt: normalizeTimestampValue(
+      getRowValue(row, "lastSyncedAt", "lastsyncedat"),
+      new Date().toISOString(),
+    ),
+  };
+}
+
 function getRowValue(row: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
     if (key in row) {
@@ -1216,6 +1440,7 @@ function cloneBookingRecord(booking: StoredBooking): BookingRecord {
     importId: booking.importId,
     source: booking.source,
     importedSource: booking.importedSource,
+    propertyId: booking.propertyId,
     propertyName: booking.propertyName,
     unitName: booking.unitName,
     checkIn: booking.checkIn,
@@ -1236,6 +1461,8 @@ function cloneBookingRecord(booking: StoredBooking): BookingRecord {
     nights: booking.nights,
     bookingNumber: booking.bookingNumber,
     overbookingStatus: booking.overbookingStatus,
+    matchStatus: booking.matchStatus,
+    matchedCalendarEventId: booking.matchedCalendarEventId,
   };
 }
 
@@ -1267,6 +1494,23 @@ function cloneCalendarClosureRecord(closure: StoredCalendarClosure): CalendarClo
     statusLabel: closure.statusLabel,
     guestCount: closure.guestCount,
     nights: closure.nights,
+  };
+}
+
+function cloneCalendarEventRecord(event: StoredCalendarEvent): CalendarEventRecord {
+  return {
+    id: event.id,
+    importId: event.importId,
+    propertyId: event.propertyId,
+    propertyName: event.propertyName,
+    source: event.source,
+    externalEventId: event.externalEventId,
+    summary: event.summary,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    eventType: event.eventType,
+    linkedBookingId: event.linkedBookingId,
+    lastSyncedAt: event.lastSyncedAt,
   };
 }
 
@@ -1850,19 +2094,22 @@ export async function appendImportData({
       const importId = Number(importResult.rows[0]?.id ?? 0);
 
       for (const booking of freshBookings) {
-        await client.query(
+        const inserted = await client.query(
           `
-            INSERT INTO bookings (
-              owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
+          INSERT INTO bookings (
+              owner_email, import_id, source, property_id, property_name, unit_name, check_in, checkout, guest_name, guest_count,
               imported_source, channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-              cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+              cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status,
+              match_status, matched_calendar_event_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+            RETURNING id
           `,
           [
             normalizedEmail,
             importId,
             source,
+            booking.propertyId,
             booking.propertyName,
             booking.unitName,
             booking.checkIn,
@@ -1884,8 +2131,22 @@ export async function appendImportData({
             booking.nights,
             booking.bookingNumber,
             booking.overbookingStatus,
+            booking.matchStatus ?? "unmatched",
+            booking.matchedCalendarEventId ?? null,
           ],
         );
+
+        const insertedBookingId = Number(inserted.rows[0]?.id ?? 0);
+        if (insertedBookingId > 0 && booking.matchedCalendarEventId) {
+          await client.query(
+            `
+              UPDATE calendar_events
+              SET linked_booking_id = $1
+              WHERE id = $2 AND owner_email = $3
+            `,
+            [insertedBookingId, booking.matchedCalendarEventId, normalizedEmail],
+          );
+        }
       }
 
       for (const expense of freshExpenses) {
@@ -2027,7 +2288,24 @@ export async function appendImportData({
         ownerEmail: normalizedEmail,
         source,
         importedSource: booking.importedSource ?? importedSource,
+        propertyId: booking.propertyId ?? null,
+        matchStatus: booking.matchStatus ?? "unmatched",
+        matchedCalendarEventId: booking.matchedCalendarEventId ?? null,
       });
+
+      if (booking.matchedCalendarEventId) {
+        const matchedIndex = store.calendarEvents.findIndex(
+          (event) =>
+            event.ownerEmail === normalizedEmail && event.id === booking.matchedCalendarEventId,
+        );
+
+        if (matchedIndex >= 0) {
+          store.calendarEvents[matchedIndex] = {
+            ...store.calendarEvents[matchedIndex],
+            linkedBookingId: store.nextBookingId - 1,
+          };
+        }
+      }
     }
 
     for (const expense of freshExpenses) {
@@ -2188,11 +2466,12 @@ export async function appendImportData({
 
     const insertBooking = db.prepare(`
       INSERT INTO bookings (
-        owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
+        owner_email, import_id, source, property_id, property_name, unit_name, check_in, checkout, guest_name, guest_count,
         imported_source, channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-        cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+        cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status,
+        match_status, matched_calendar_event_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertExpense = db.prepare(`
@@ -2209,10 +2488,11 @@ export async function appendImportData({
     `);
 
     for (const booking of freshBookings) {
-      insertBooking.run(
+      const bookingInsertResult = insertBooking.run(
         normalizedEmail,
         importId,
         source,
+        booking.propertyId ?? null,
         booking.propertyName,
         booking.unitName,
         booking.checkIn,
@@ -2234,7 +2514,19 @@ export async function appendImportData({
         booking.nights,
         booking.bookingNumber,
         booking.overbookingStatus,
+        booking.matchStatus ?? "unmatched",
+        booking.matchedCalendarEventId ?? null,
       );
+
+      if (booking.matchedCalendarEventId) {
+        db.prepare(
+          `
+            UPDATE calendar_events
+            SET linked_booking_id = ?
+            WHERE id = ? AND owner_email = ?
+          `,
+        ).run(Number(bookingInsertResult.lastInsertRowid), booking.matchedCalendarEventId, normalizedEmail);
+      }
     }
 
     for (const expense of freshExpenses) {
@@ -2927,6 +3219,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           import_id AS importId,
           source,
           imported_source AS importedSource,
+          property_id AS propertyId,
           property_name AS propertyName,
           unit_name AS unitName,
           check_in AS checkIn,
@@ -2946,7 +3239,9 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           payout,
           nights,
           booking_number AS bookingNumber,
-          overbooking_status AS overbookingStatus
+          overbooking_status AS overbookingStatus,
+          match_status AS matchStatus,
+          matched_calendar_event_id AS matchedCalendarEventId
         FROM bookings
         WHERE owner_email = $1
         ORDER BY check_in ASC
@@ -2975,6 +3270,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           import_id AS importId,
           source,
           imported_source AS importedSource,
+          property_id AS propertyId,
           property_name AS propertyName,
           unit_name AS unitName,
           check_in AS checkIn,
@@ -2994,7 +3290,9 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           payout,
           nights,
           booking_number AS bookingNumber,
-          overbooking_status AS overbookingStatus
+          overbooking_status AS overbookingStatus,
+          match_status AS matchStatus,
+          matched_calendar_event_id AS matchedCalendarEventId
         FROM bookings
         WHERE owner_email = ?
         ORDER BY check_in ASC
@@ -3128,6 +3426,72 @@ export async function getCalendarClosures(ownerEmail: string): Promise<CalendarC
     )
     .all(normalizedEmail)
     .map((row) => mapCalendarClosureRecord(row as Record<string, unknown>));
+}
+
+export async function getCalendarEvents(ownerEmail: string): Promise<CalendarEventRecord[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          property_id AS propertyId,
+          property_name AS propertyName,
+          source,
+          external_event_id AS externalEventId,
+          summary,
+          start_date AS startDate,
+          end_date AS endDate,
+          event_type AS eventType,
+          linked_booking_id AS linkedBookingId,
+          last_synced_at AS lastSyncedAt
+        FROM calendar_events
+        WHERE owner_email = $1
+        ORDER BY start_date ASC
+      `,
+      [normalizedEmail],
+    );
+
+    return result.rows.map((row) => mapCalendarEventRecord(row as Record<string, unknown>));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+
+    return store.calendarEvents
+      .filter((event) => event.ownerEmail === normalizedEmail)
+      .sort((left, right) => left.startDate.localeCompare(right.startDate))
+      .map(cloneCalendarEventRecord);
+  }
+
+  const db = getSQLiteDatabase();
+  return db
+    .prepare(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          property_id AS propertyId,
+          property_name AS propertyName,
+          source,
+          external_event_id AS externalEventId,
+          summary,
+          start_date AS startDate,
+          end_date AS endDate,
+          event_type AS eventType,
+          linked_booking_id AS linkedBookingId,
+          last_synced_at AS lastSyncedAt
+        FROM calendar_events
+        WHERE owner_email = ?
+        ORDER BY start_date ASC
+      `,
+    )
+    .all(normalizedEmail)
+    .map((row) => mapCalendarEventRecord(row as Record<string, unknown>));
 }
 
 export async function getPropertyDefinitions(
@@ -3882,6 +4246,9 @@ export async function insertManualBooking({
       ownerEmail: normalizedEmail,
       source: "manual",
       importedSource: booking.importedSource ?? "generic_excel",
+      propertyId: booking.propertyId ?? null,
+      matchStatus: booking.matchStatus ?? "unmatched",
+      matchedCalendarEventId: booking.matchedCalendarEventId ?? null,
     });
 
     return id;

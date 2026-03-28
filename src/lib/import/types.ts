@@ -30,8 +30,20 @@ export type ImportDuplicateFlag = {
   matchScope: "file" | "existing";
 };
 
+export type ImportCalendarMatch = {
+  rowIndex: number;
+  matchType: "exact" | "probable" | "blocked_conflict";
+  calendarEventId: number;
+  summary: string;
+  eventType: "booking" | "blocked" | "unknown";
+  message: string;
+};
+
+export type ImportBookingRowStatus = "new" | "matched" | "duplicate" | "conflict";
+
 export type NormalizedImportBooking = {
   source: ImportDetectedSource;
+  propertyId?: number | null;
   propertyName: string;
   bookingReference: string;
   guestName: string;
@@ -66,6 +78,8 @@ export type ImportBookingCandidate = {
   booking: NormalizedImportBooking;
   warnings: ImportValidationWarning[];
   duplicate?: ImportDuplicateFlag;
+  calendarMatch?: ImportCalendarMatch;
+  rowStatus?: ImportBookingRowStatus;
 };
 
 export type ImportExpenseCandidate = {
@@ -77,7 +91,9 @@ export type ImportExpenseCandidate = {
 export type ImportPreviewRow = Pick<
   NormalizedImportBooking,
   "guestName" | "channel" | "checkIn" | "checkOut" | "grossRevenue" | "payout"
->;
+> & {
+  status: ImportBookingRowStatus;
+};
 
 export type ImportEditableBooking = Pick<
   NormalizedImportBooking,
@@ -96,7 +112,7 @@ export type ImportEditableBooking = Pick<
   | "status"
 >;
 
-export type ImportReviewSection = "valid" | "warnings" | "duplicates" | "errors";
+export type ImportReviewSection = "valid" | "warnings" | "duplicates" | "conflicts" | "errors";
 
 export type ImportManualMappingField =
   | "guestName"
@@ -175,6 +191,9 @@ export type ImportPreview = {
   validRows: number;
   warningRows: number;
   duplicateRows: number;
+  matchedRows: number;
+  conflictRows: number;
+  newRows: number;
   errorRows: number;
   skippedRows: number;
   expensesDetected: number;
@@ -198,6 +217,7 @@ export type ImportPreview = {
   reviewRows: Record<ImportReviewSection, ImportReviewRow[]>;
   warnings: ImportValidationWarning[];
   duplicates: ImportDuplicateFlag[];
+  calendarMatches: ImportCalendarMatch[];
   canImport: boolean;
 };
 

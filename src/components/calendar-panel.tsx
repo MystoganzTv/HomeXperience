@@ -23,11 +23,22 @@ import { Modal } from "@/components/modal";
 import { SectionCard } from "@/components/section-card";
 import type {
   BookingRecord,
+  CalendarEventRecord,
   CalendarClosureRecord,
   CurrencyCode,
 } from "@/lib/types";
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+type CalendarTimelineItem = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  label: string;
+  channel: string;
+  variant: "financial_booking" | "calendar_booking" | "blocked_conflict";
+  booking?: BookingRecord;
+};
 
 function buildCalendarDays(anchor: Date) {
   const monthStart = startOfMonth(anchor);
@@ -52,7 +63,15 @@ function chunkWeeks(days: Date[]) {
   return weeks;
 }
 
-function getBookingTone(channel: string) {
+function getBookingTone(channel: string, variant: CalendarTimelineItem["variant"] = "financial_booking") {
+  if (variant === "blocked_conflict") {
+    return "border-rose-300/22 bg-[linear-gradient(180deg,rgba(251,113,133,0.2)_0%,rgba(67,24,39,0.88)_100%)] text-white";
+  }
+
+  if (variant === "calendar_booking") {
+    return "border-slate-300/18 bg-[linear-gradient(180deg,rgba(148,163,184,0.16)_0%,rgba(36,47,63,0.86)_100%)] text-slate-100";
+  }
+
   const normalized = channel.trim().toLowerCase();
 
   if (normalized.includes("airbnb")) {
@@ -75,6 +94,78 @@ function getGuestLabel(booking: BookingRecord) {
   const extraGuests = Math.max(0, booking.guestCount - 1);
 
   return extraGuests > 0 ? `${primary} + ${extraGuests}` : primary;
+}
+
+function buildTimelineItems(
+  bookings: BookingRecord[],
+  calendarEvents: CalendarEventRecord[],
+) {
+  const linkedCalendarEventIds = new Set(
+    bookings
+      .map((booking) => booking.matchedCalendarEventId)
+      .filter((value): value is number => typeof value === "number" && value > 0),
+  );
+
+  const bookingItems: CalendarTimelineItem[] = bookings.map((booking) => ({
+    id: `booking-${booking.id ?? booking.bookingNumber}-${booking.checkIn}`,
+    startDate: booking.checkIn,
+    endDate: booking.checkout,
+    label: getGuestLabel(booking),
+    channel: booking.channel,
+    variant:
+      booking.matchStatus === "conflict_blocked_calendar" ? "blocked_conflict" : "financial_booking",
+    booking,
+  }));
+
+  const calendarBookingItems: CalendarTimelineItem[] = calendarEvents
+    .filter(
+      (event) =>
+        event.eventType === "booking" &&
+        !event.linkedBookingId &&
+        !linkedCalendarEventIds.has(Number(event.id ?? 0)),
+    )
+    .map((event) => ({
+      id: `calendar-${event.id ?? event.externalEventId}-${event.startDate}`,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      label: event.summary.trim() || "Calendar booking",
+      channel: event.source,
+      variant: "calendar_booking",
+    }));
+
+  return [...bookingItems, ...calendarBookingItems];
+}
+
+function buildBlockedDateSet(
+  anchorDate: Date,
+  closures: CalendarClosureRecord[],
+  calendarEvents: CalendarEventRecord[],
+) {
+  const blockedDates = new Set(closures.map((closure) => closure.date));
+
+  calendarEvents
+    .filter((event) => event.eventType === "blocked")
+    .forEach((event) => {
+      const start = parseISO(event.startDate);
+      const endExclusive = parseISO(event.endDate);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(endExclusive.getTime())) {
+        return;
+      }
+
+      const effectiveEnd = addDays(endExclusive, -1);
+      if (effectiveEnd < start) {
+        return;
+      }
+
+      eachDayOfInterval({ start, end: effectiveEnd }).forEach((day) => {
+        if (isSameMonth(day, anchorDate)) {
+          blockedDates.add(format(day, "yyyy-MM-dd"));
+        }
+      });
+    });
+
+  return blockedDates;
 }
 
 function getBookingSelectionKey(booking: BookingRecord) {
@@ -100,30 +191,30 @@ function intersectsMonth(booking: BookingRecord, anchorDate: Date) {
   return stayStart <= monthEnd && stayEnd > monthStart;
 }
 
-function buildWeekBookingSegments(weekDays: Date[], bookings: BookingRecord[]) {
+function buildWeekBookingSegments(weekDays: Date[], items: CalendarTimelineItem[]) {
   const weekStart = weekDays[0];
   const weekEnd = weekDays[6];
   const weekEndExclusive = addDays(weekEnd, 1);
 
-  const visibleBookings = bookings
-    .filter((booking) => {
-      const stayStart = parseISO(booking.checkIn);
-      const stayEnd = parseISO(booking.checkout);
+  const visibleItems = items
+    .filter((item) => {
+      const stayStart = parseISO(item.startDate);
+      const stayEnd = parseISO(item.endDate);
       return stayStart < weekEndExclusive && stayEnd > weekStart;
     })
     .sort((left, right) => {
-      if (left.checkIn !== right.checkIn) {
-        return left.checkIn.localeCompare(right.checkIn);
+      if (left.startDate !== right.startDate) {
+        return left.startDate.localeCompare(right.startDate);
       }
 
-      return left.checkout.localeCompare(right.checkout);
+      return left.endDate.localeCompare(right.endDate);
     });
 
   const trackEnds: number[] = [];
 
-  const segments = visibleBookings.map((booking) => {
-    const stayStart = parseISO(booking.checkIn);
-    const stayEnd = parseISO(booking.checkout);
+  const segments = visibleItems.map((item) => {
+    const stayStart = parseISO(item.startDate);
+    const stayEnd = parseISO(item.endDate);
     const segmentStart = max([stayStart, weekStart]);
     const segmentEnd = min([stayEnd, weekEndExclusive]);
     const startIndex = differenceInCalendarDays(segmentStart, weekStart);
@@ -139,7 +230,7 @@ function buildWeekBookingSegments(weekDays: Date[], bookings: BookingRecord[]) {
     trackEnds[track] = startIndex + span;
 
     return {
-      booking,
+      item,
       startIndex,
       span,
       track,
@@ -157,6 +248,7 @@ function buildWeekBookingSegments(weekDays: Date[], bookings: BookingRecord[]) {
 function MonthCalendar({
   anchorDate,
   bookings,
+  calendarEvents,
   closures,
   currencyCode,
   compact = false,
@@ -165,6 +257,7 @@ function MonthCalendar({
 }: {
   anchorDate: Date;
   bookings: BookingRecord[];
+  calendarEvents: CalendarEventRecord[];
   closures: CalendarClosureRecord[];
   currencyCode: CurrencyCode;
   compact?: boolean;
@@ -175,14 +268,21 @@ function MonthCalendar({
   const weeks = chunkWeeks(days);
   const monthLabel = format(anchorDate, abbreviatedTitle ? "MMMM" : "MMMM yyyy");
   const monthKey = format(anchorDate, "yyyy-MM");
-  const checkIns = bookings.filter((booking) => booking.checkIn.startsWith(monthKey));
-  const checkOuts = bookings.filter((booking) => booking.checkout.startsWith(monthKey));
-  const monthClosures = closures.filter((closure) => closure.date.startsWith(monthKey));
+  const timelineItems = buildTimelineItems(bookings, calendarEvents).filter((item) => {
+    const stayStart = parseISO(item.startDate);
+    const stayEnd = parseISO(item.endDate);
+    const monthStart = startOfMonth(anchorDate);
+    const monthEnd = endOfMonth(anchorDate);
+    return stayStart <= monthEnd && stayEnd > monthStart;
+  });
+  const checkIns = timelineItems.filter((item) => item.startDate.startsWith(monthKey));
+  const checkOuts = timelineItems.filter((item) => item.endDate.startsWith(monthKey));
+  const blockedDateSet = buildBlockedDateSet(anchorDate, closures, calendarEvents);
 
   return (
     <SectionCard
       title={monthLabel}
-      subtitle={`${formatNumber(checkIns.length)} check-ins, ${formatNumber(checkOuts.length)} check-outs, ${formatNumber(monthClosures.length)} closed days`}
+      subtitle={`${formatNumber(checkIns.length)} check-ins, ${formatNumber(checkOuts.length)} check-outs, ${formatNumber(blockedDateSet.size)} closed days`}
     >
       <div className="space-y-3">
         <div className="grid grid-cols-7 gap-2">
@@ -198,7 +298,7 @@ function MonthCalendar({
 
         <div className="space-y-2.5">
           {weeks.map((weekDays) => {
-            const { segments, maxTracks } = buildWeekBookingSegments(weekDays, bookings);
+            const { segments, maxTracks } = buildWeekBookingSegments(weekDays, timelineItems);
             const rowHeight = compact ? Math.max(88, 38 + maxTracks * 26) : Math.max(124, 48 + maxTracks * 32);
             const barHeight = compact ? 22 : 28;
             const overlayTop = compact ? 34 : 40;
@@ -208,7 +308,7 @@ function MonthCalendar({
                 <div className="grid h-full grid-cols-7 gap-2">
                   {weekDays.map((day) => {
                     const dayKey = format(day, "yyyy-MM-dd");
-                    const dayClosure = closures.find((closure) => closure.date === dayKey);
+                    const dayClosure = blockedDateSet.has(dayKey);
                     const isCurrentMonth = isSameMonth(day, anchorDate);
                     const monthChipLabel = format(day, "MMM");
 
@@ -252,25 +352,31 @@ function MonthCalendar({
                     {segments.map((segment) => (
                       <button
                         type="button"
-                        key={`${segment.booking.id ?? segment.booking.bookingNumber}-${segment.startIndex}-${segment.track}`}
-                        onClick={() => onSelectBooking(segment.booking)}
-                        className={`flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border px-3 text-left shadow-[0_10px_24px_rgba(2,6,23,0.22)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[var(--workspace-accent)]/70 ${getBookingTone(segment.booking.channel)}`}
+                        key={`${segment.item.id}-${segment.startIndex}-${segment.track}`}
+                        onClick={() => {
+                          if (segment.item.booking) {
+                            onSelectBooking(segment.item.booking);
+                          }
+                        }}
+                        className={`flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border px-3 text-left shadow-[0_10px_24px_rgba(2,6,23,0.22)] transition ${
+                          segment.item.booking ? "hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[var(--workspace-accent)]/70" : "cursor-default"
+                        } ${getBookingTone(segment.item.channel, segment.item.variant)}`}
                         style={{
                           gridColumn: `${segment.startIndex + 1} / span ${segment.span}`,
                           gridRow: segment.track + 1,
                           height: `${barHeight}px`,
                         }}
-                        title={`${segment.booking.guestName} · ${formatDateLabel(segment.booking.checkIn)} to ${formatDateLabel(segment.booking.checkout)}`}
+                        title={`${segment.item.label} · ${formatDateLabel(segment.item.startDate)} to ${formatDateLabel(segment.item.endDate)}`}
                       >
                         {segment.startsThisWeek ? (
                           <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-white/85" />
                         ) : null}
                         <span className={`truncate font-medium ${compact ? "text-[11px]" : "text-xs"}`}>
-                          {getGuestLabel(segment.booking)}
+                          {segment.item.label}
                         </span>
                         {!compact && segment.span > 2 ? (
                           <span className="ml-auto shrink-0 text-[11px] text-white/70">
-                            {segment.booking.channel}
+                            {segment.item.booking ? segment.item.channel : "synced"}
                           </span>
                         ) : null}
                         {segment.endsThisWeek ? (
@@ -292,12 +398,14 @@ function MonthCalendar({
 export function CalendarPanel({
   rangeLabel,
   bookings,
+  calendarEvents,
   closures,
   monthAnchors,
   currencyCode,
 }: {
   rangeLabel: string;
   bookings: BookingRecord[];
+  calendarEvents: CalendarEventRecord[];
   closures: CalendarClosureRecord[];
   monthAnchors: Date[];
   currencyCode: CurrencyCode;
@@ -337,6 +445,11 @@ export function CalendarPanel({
         {monthAnchors.map((anchorDate) => {
           const monthKey = format(anchorDate, "yyyy-MM");
           const monthBookings = bookings.filter((booking) => intersectsMonth(booking, anchorDate));
+          const monthCalendarEvents = calendarEvents.filter((event) => {
+            const eventStart = parseISO(event.startDate);
+            const eventEnd = parseISO(event.endDate);
+            return eventStart <= endOfMonth(anchorDate) && eventEnd > startOfMonth(anchorDate);
+          });
           const monthClosures = closures.filter((closure) =>
             isWithinInterval(parseISO(closure.date), {
               start: startOfMonth(anchorDate),
@@ -357,6 +470,7 @@ export function CalendarPanel({
               <MonthCalendar
                 anchorDate={anchorDate}
                 bookings={monthBookings}
+                calendarEvents={monthCalendarEvents}
                 closures={monthClosures}
                 currencyCode={currencyCode}
                 compact={showOverviewGrid}

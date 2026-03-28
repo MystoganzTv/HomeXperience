@@ -5,6 +5,7 @@ import {
   appendFinancialStatementImport,
   appendImportData,
   getBookings,
+  getCalendarEvents,
   getPropertyDefinitions,
 } from "@/lib/db";
 import { buildImportPreview, mapPreviewToHostlyxRecords } from "@/lib/import/importPipeline";
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const action = String(formData.get("action") ?? "preview").trim().toLowerCase();
+    const requestedPropertyName = String(formData.get("propertyName") ?? "").trim();
     const fileValue = formData.get("file");
     const manualMappingValue = formData.get("manualMapping");
     const rowResolutionsValue = formData.get("rowResolutions");
@@ -41,7 +43,10 @@ export async function POST(request: Request) {
     }
 
     const buffer = await fileValue.arrayBuffer();
-    const existingBookings = await getBookings(ownerEmail);
+    const [existingBookings, existingCalendarEvents] = await Promise.all([
+      getBookings(ownerEmail),
+      getCalendarEvents(ownerEmail),
+    ]);
     let manualMapping: ImportManualMapping | null = null;
     let rowResolutions: ImportRowResolution[] = [];
 
@@ -67,7 +72,8 @@ export async function POST(request: Request) {
       }
     }
 
-    const preview = buildImportPreview(buffer, fileValue.name, existingBookings, {
+    const preview = buildImportPreview(buffer, fileValue.name, existingBookings, existingCalendarEvents, {
+      propertyName: requestedPropertyName,
       manualMapping,
       rowResolutions,
     });
@@ -86,6 +92,9 @@ export async function POST(request: Request) {
           validRows: preview.validRows,
           warningRows: preview.warningRows,
           duplicateRows: preview.duplicateRows,
+          matchedRows: preview.matchedRows,
+          conflictRows: preview.conflictRows,
+          newRows: preview.newRows,
           errorRows: preview.errorRows,
           skippedRows: preview.skippedRows,
           expensesDetected: preview.expensesDetected,
@@ -95,6 +104,7 @@ export async function POST(request: Request) {
           reviewRows: preview.reviewRows,
           warnings: preview.warnings,
           duplicates: preview.duplicates,
+          calendarMatches: preview.calendarMatches,
           canImport: preview.canImport,
         },
       });
@@ -122,7 +132,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const requestedPropertyName = String(formData.get("propertyName") ?? "").trim();
     const targetPropertyName = requestedPropertyName || propertyDefinitions[0]?.name || "";
 
     if (

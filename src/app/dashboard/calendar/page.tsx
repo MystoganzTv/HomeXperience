@@ -12,6 +12,7 @@ import { getAuthSession } from "@/lib/auth";
 import { getDashboardFilters } from "@/lib/dashboard";
 import {
   getBookings,
+  getCalendarEvents,
   getCalendarClosures,
   getLatestImport,
   getPropertyDefinitions,
@@ -25,6 +26,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function getCalendarMonthAnchors(
   bookings: Awaited<ReturnType<typeof getBookings>>,
+  calendarEvents: Awaited<ReturnType<typeof getCalendarEvents>>,
   closures: Awaited<ReturnType<typeof getCalendarClosures>>,
   year: number | "all",
   month: number | "all",
@@ -32,6 +34,8 @@ function getCalendarMonthAnchors(
   const allDates = [
     ...bookings.map((booking) => parseISO(booking.checkIn)),
     ...bookings.map((booking) => parseISO(booking.checkout)),
+    ...calendarEvents.map((event) => parseISO(event.startDate)),
+    ...calendarEvents.map((event) => parseISO(event.endDate)),
     ...closures.map((closure) => parseISO(closure.date)),
   ].filter((date) => !Number.isNaN(date.getTime()));
 
@@ -86,8 +90,9 @@ export default async function CalendarPage({
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, closures, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
+  const [bookings, calendarEvents, closures, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
     getBookings(ownerEmail),
+    getCalendarEvents(ownerEmail),
     getCalendarClosures(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
@@ -124,8 +129,17 @@ export default async function CalendarPage({
     return filters.countryCode === "all" || countryCode === filters.countryCode;
   });
 
+  const countryCalendarEvents = calendarEvents.filter((event) => {
+    const countryCode =
+      propertyCountryMap.get(event.propertyName.trim().toLowerCase()) ??
+      userSettings.primaryCountryCode;
+
+    return filters.countryCode === "all" || countryCode === filters.countryCode;
+  });
+
   const monthAnchors = getCalendarMonthAnchors(
     countryAndChannelBookings,
+    countryCalendarEvents,
     countryClosures,
     filters.year,
     filters.month,
@@ -169,6 +183,7 @@ export default async function CalendarPage({
           years={Array.from(
             new Set([
               ...bookings.map((booking) => parseISO(booking.checkIn).getFullYear()),
+              ...calendarEvents.map((event) => parseISO(event.startDate).getFullYear()),
               ...closures.map((closure) => parseISO(closure.date).getFullYear()),
             ]),
           ).sort((a, b) => b - a)}
@@ -186,6 +201,7 @@ export default async function CalendarPage({
       <CalendarPanel
         rangeLabel={rangeLabel}
         bookings={countryAndChannelBookings}
+        calendarEvents={countryCalendarEvents}
         closures={countryClosures}
         monthAnchors={monthAnchors}
         currencyCode={currencyCode}

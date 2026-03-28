@@ -44,6 +44,15 @@ type PreviewDuplicate = {
   matchScope: "file" | "existing";
 };
 
+type PreviewCalendarMatch = {
+  rowIndex: number;
+  matchType: "exact" | "probable" | "blocked_conflict";
+  calendarEventId: number;
+  summary: string;
+  eventType: "booking" | "blocked" | "unknown";
+  message: string;
+};
+
 type PreviewRow = {
   guestName: string;
   channel: string;
@@ -51,9 +60,10 @@ type PreviewRow = {
   checkOut: string;
   grossRevenue: number;
   payout: number;
+  status: "new" | "matched" | "duplicate" | "conflict";
 };
 
-type ReviewSection = "valid" | "warnings" | "duplicates" | "errors";
+type ReviewSection = "valid" | "warnings" | "duplicates" | "conflicts" | "errors";
 
 type MappingField =
   | "guestName"
@@ -119,6 +129,9 @@ type ImportPreviewPayload = {
   validRows: number;
   warningRows: number;
   duplicateRows: number;
+  matchedRows: number;
+  conflictRows: number;
+  newRows: number;
   errorRows: number;
   skippedRows: number;
   expensesDetected: number;
@@ -140,6 +153,7 @@ type ImportPreviewPayload = {
   reviewRows: Record<ReviewSection, ReviewRow[]>;
   warnings: PreviewWarning[];
   duplicates: PreviewDuplicate[];
+  calendarMatches: PreviewCalendarMatch[];
   canImport: boolean;
 };
 
@@ -245,6 +259,35 @@ function getSourcePresentation(source: ImportPreviewPayload["source"]) {
   }
 }
 
+function getPreviewStatusPill(status: PreviewRow["status"]) {
+  if (status === "matched") {
+    return "border-teal-300/24 bg-teal-300/[0.08] text-teal-100";
+  }
+
+  if (status === "duplicate") {
+    return "border-amber-300/24 bg-amber-300/[0.08] text-amber-100";
+  }
+
+  if (status === "conflict") {
+    return "border-rose-400/24 bg-rose-400/[0.08] text-rose-100";
+  }
+
+  return "border-emerald-300/24 bg-emerald-300/[0.08] text-emerald-100";
+}
+
+function getPreviewStatusLabel(status: PreviewRow["status"]) {
+  switch (status) {
+    case "matched":
+      return "Matched";
+    case "duplicate":
+      return "Duplicate";
+    case "conflict":
+      return "Conflict";
+    default:
+      return "New";
+  }
+}
+
 export function UploadPanel({
   properties,
   title = "Bring your data",
@@ -337,6 +380,7 @@ export function UploadPanel({
 
     return [
       ...preview.reviewRows.errors,
+      ...preview.reviewRows.conflicts,
       ...preview.reviewRows.duplicates,
       ...preview.reviewRows.warnings,
     ].slice(0, 8);
@@ -1373,17 +1417,17 @@ export function UploadPanel({
                         ["Taxes detected", formatCurrency(preview.financialStatement.totalTaxes), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
                       ]
                     : [
-                        ["Bookings detected", String(preview.importableRows), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
-                        ["Expenses detected", String(preview.expensesDetected), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["New bookings", String(preview.newRows), "text-emerald-100", "border-emerald-400/18 bg-emerald-300/[0.08]"],
+                        ["Matched to calendar", String(preview.matchedRows), "text-teal-100", "border-teal-400/18 bg-teal-300/[0.08]"],
                         [
-                          preview.errorRows > 0 ? "Errors" : "Warnings",
-                          String(preview.errorRows > 0 ? preview.errorRows : preview.warningRows),
-                          preview.errorRows > 0 ? "text-rose-100" : "text-amber-100",
-                          preview.errorRows > 0
-                            ? "border-rose-400/20 bg-rose-300/[0.08]"
-                            : "border-amber-400/20 bg-amber-300/[0.08]",
+                          "Conflicts",
+                          String(preview.conflictRows),
+                          "text-rose-100",
+                          "border-rose-400/20 bg-rose-300/[0.08]",
                         ],
-                        ["Duplicates", String(preview.duplicateRows), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["Duplicates", String(preview.duplicateRows), "text-amber-100", "border-amber-400/20 bg-amber-300/[0.08]"],
+                        ["Warnings", String(preview.warningRows + preview.errorRows), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["Expenses detected", String(preview.expensesDetected), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
                       ]
                   ).map(([label, value, tone, surface]) => (
                     <div
@@ -1396,8 +1440,8 @@ export function UploadPanel({
                       <p className={`mt-3 text-3xl font-semibold ${tone}`}>
                         {value}
                       </p>
-                      {label === "Errors" && preview.errorRows > 0 ? (
-                        <p className="mt-2 text-xs leading-5 text-rose-100/75">These rows will be skipped unless you fix the source file.</p>
+                      {label === "Conflicts" && preview.conflictRows > 0 ? (
+                        <p className="mt-2 text-xs leading-5 text-rose-100/75">These bookings overlap blocked dates and need review before import.</p>
                       ) : null}
                       {label === "Statement source" && preview.financialStatement ? (
                         <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
@@ -1578,6 +1622,7 @@ export function UploadPanel({
                           <tr>
                             <th className="pb-3 pr-4 font-medium">Guest</th>
                             <th className="pb-3 pr-4 font-medium">Channel</th>
+                            <th className="pb-3 pr-4 font-medium">Status</th>
                             <th className="pb-3 pr-4 font-medium">Check-in</th>
                             <th className="pb-3 pr-4 font-medium">Check-out</th>
                             <th className="pb-3 pr-4 font-medium">Gross Revenue</th>
@@ -1589,6 +1634,11 @@ export function UploadPanel({
                             <tr key={`${row.guestName}-${row.checkIn}-${index}`}>
                               <td className="py-3 pr-4">{row.guestName || "Guest"}</td>
                               <td className="py-3 pr-4">{row.channel}</td>
+                              <td className="py-3 pr-4">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] ${getPreviewStatusPill(row.status)}`}>
+                                  {getPreviewStatusLabel(row.status)}
+                                </span>
+                              </td>
                               <td className="py-3 pr-4">{row.checkIn || "—"}</td>
                               <td className="py-3 pr-4">{row.checkOut || "—"}</td>
                               <td className="py-3 pr-4">{formatCurrency(row.grossRevenue)}</td>
@@ -1610,7 +1660,7 @@ export function UploadPanel({
                     ref={reviewRef}
                     open={
                       !preview.financialStatement &&
-                      preview.warningRows + preview.duplicateRows + preview.errorRows > 0
+                      preview.warningRows + preview.duplicateRows + preview.conflictRows + preview.errorRows > 0
                     }
                     className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5"
                   >
@@ -1643,6 +1693,8 @@ export function UploadPanel({
                             className={`rounded-[18px] border px-4 py-4 text-sm ${
                               row.section === "errors"
                                 ? "border-rose-400/18 bg-rose-300/[0.07] text-rose-50/90"
+                                : row.section === "conflicts"
+                                  ? "border-rose-400/18 bg-rose-300/[0.07] text-rose-50/90"
                                 : row.section === "duplicates"
                                   ? "border-amber-400/18 bg-amber-300/[0.07] text-amber-50/90"
                                   : "border-[var(--workspace-border)] bg-white/[0.03] text-[var(--workspace-text)]"
@@ -1653,9 +1705,9 @@ export function UploadPanel({
                               Row {row.rowIndex} • {row.subtitle}
                             </p>
                             <p className="mt-2 text-sm opacity-85">{row.reasons[0]}</p>
-                            {row.section === "errors" ? (
+                            {row.section === "errors" || row.section === "conflicts" ? (
                               <p className="mt-2 text-xs uppercase tracking-[0.12em] opacity-65">
-                                Fix this row in the source file and upload again if you want it included.
+                                Review this row before import. If it is not valid, fix it or skip it.
                               </p>
                             ) : null}
                             {row.rowType === "booking" && row.canResolve && row.booking ? (
@@ -1668,7 +1720,7 @@ export function UploadPanel({
                                   <PencilLine className="h-4 w-4" />
                                   Fix in Hostlyx
                                 </button>
-                                {row.section === "errors" ? (
+                                {row.section === "errors" || row.section === "conflicts" ? (
                                   <button
                                     type="button"
                                     onClick={() => void skipBookingRow(row.rowIndex)}
