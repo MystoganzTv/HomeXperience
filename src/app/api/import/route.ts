@@ -79,6 +79,8 @@ export async function POST(request: Request) {
           sourceLabel: preview.sourceLabel,
           fileName: preview.fileName,
           requiresManualMapping: preview.requiresManualMapping,
+          blocksImport: preview.blocksImport,
+          blockMessage: preview.blockMessage,
           manualMapping: preview.manualMapping,
           totalRowsRead: preview.totalRowsRead,
           validRows: preview.validRows,

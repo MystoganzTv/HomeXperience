@@ -307,7 +307,7 @@ export function UploadPanel({
     }
 
     if (preview.source === "financial_statement") {
-      return "Import as financial statement";
+      return "Save financial statement";
     }
 
     if (preview.blocksImport) {
@@ -1179,15 +1179,7 @@ export function UploadPanel({
                             >
                               {phase === "importing" ? "Saving statement..." : "Save financial statement"}
                             </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={scrollToImportAction}
-                              className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition"
-                            >
-                              Find final step
-                            </button>
-                          )}
+                          ) : null}
                         </div>
                       ) : needsFocusedMapping ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1422,13 +1414,6 @@ export function UploadPanel({
                         ) : (
                           "Save financial statement"
                         )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={scrollToImportAction}
-                        className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
-                      >
-                        Jump to final summary
                       </button>
                     </div>
                   </div>
@@ -1719,10 +1704,10 @@ export function UploadPanel({
                             <LoaderCircle className="h-4 w-4 animate-spin" />
                             {importButtonLabel}
                           </>
-                        ) : actionableRows > 0 ? (
+                        ) : actionableRows > 0 || preview.financialStatement ? (
                           importButtonLabel
                         ) : (
-                          "Map columns manually"
+                          shouldShowManualMapping ? "Map columns manually" : "Nothing ready to import"
                         )}
                       </button>
                       <button
