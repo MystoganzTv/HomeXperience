@@ -217,19 +217,19 @@ function MonthCalendar({
                             ? "border-amber-300/14 bg-[linear-gradient(180deg,rgba(244,198,105,0.08)_0%,rgba(15,24,38,0.92)_100%)]"
                             : isCurrentMonth
                               ? "workspace-soft-card"
-                              : "border-white/5 bg-[rgba(7,14,24,0.36)] opacity-55"
+                              : "border-white/[0.035] bg-[linear-gradient(180deg,rgba(7,12,20,0.96)_0%,rgba(4,8,15,0.98)_100%)]"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <p
                             className={`font-semibold ${compact ? "text-xs" : "text-sm"} ${
-                              isCurrentMonth ? "text-[var(--workspace-text)]" : "text-[var(--workspace-muted)]"
+                              isCurrentMonth ? "text-[var(--workspace-text)]" : "text-slate-500"
                             }`}
                           >
                             {format(day, "d")}
                           </p>
                           {!isCurrentMonth ? (
-                            <span className="rounded-full border border-white/8 bg-[linear-gradient(180deg,rgba(148,163,184,0.12)_0%,rgba(15,23,36,0.9)_100%)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
+                            <span className="rounded-full border border-slate-400/20 bg-[linear-gradient(180deg,rgba(148,163,184,0.18)_0%,rgba(30,41,59,0.36)_100%)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300 shadow-[0_10px_22px_rgba(2,6,23,0.22)]">
                               {monthChipLabel}
                             </span>
                           ) : dayClosure ? (
