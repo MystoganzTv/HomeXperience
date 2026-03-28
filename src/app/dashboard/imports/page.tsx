@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { FileSpreadsheet, Layers3 } from "lucide-react";
 import { ImportsManager } from "@/components/imports-manager";
 import { SectionCard } from "@/components/section-card";
+import { UploadPanel } from "@/components/upload-panel";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
 import {
@@ -46,8 +47,8 @@ export default async function ImportsPage() {
   return (
     <WorkspaceShell
       activePage="imports"
-      pageTitle="Import History"
-      pageSubtitle="CSV and Excel files are treated as one-time intake. After import, your source of truth lives inside Hostlyx."
+      pageTitle="Import Center"
+      pageSubtitle="Bring your files into Hostlyx, review the data calmly, and update your financial view with confidence."
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -55,6 +56,8 @@ export default async function ImportsPage() {
       latestImport={latestImport}
     >
       <div className="space-y-6">
+        <UploadPanel properties={properties} />
+
         <div className="grid gap-4 md:grid-cols-3">
           <SectionCard title="Imported files">
             <div className="flex items-center gap-3">

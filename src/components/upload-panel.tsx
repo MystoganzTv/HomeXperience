@@ -3,10 +3,16 @@
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   AlertTriangle,
+  BedDouble,
+  Building2,
   CheckCircle2,
+  ChevronDown,
   FileSpreadsheet,
   LoaderCircle,
+  ShieldCheck,
+  Sparkles,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -114,13 +120,15 @@ type ImportResponsePayload = {
   error?: string;
   message?: string;
   preview?: ImportPreviewPayload;
-  committed?: {
-    source: string;
-    sourceLabel: string;
-    bookingsImported: number;
-    expensesImported: number;
-    skippedRows: number;
-  };
+  committed?: ImportCommittedPayload;
+};
+
+type ImportCommittedPayload = {
+  source: string;
+  sourceLabel: string;
+  bookingsImported: number;
+  expensesImported: number;
+  skippedRows: number;
 };
 
 type UploadToast = {
@@ -156,18 +164,49 @@ async function parseResponse(response: Response) {
   }
 }
 
+function getSourcePresentation(source: ImportPreviewPayload["source"]) {
+  switch (source) {
+    case "airbnb":
+      return {
+        icon: BedDouble,
+        badge: "Airbnb",
+        description: "We detected your file format and mapped your data automatically.",
+      };
+    case "booking":
+      return {
+        icon: Building2,
+        badge: "Booking.com",
+        description: "We detected your file format and mapped your data automatically.",
+      };
+    case "generic":
+      return {
+        icon: FileSpreadsheet,
+        badge: "Excel",
+        description: "We detected your workbook structure and prepared it for review.",
+      };
+    default:
+      return {
+        icon: Sparkles,
+        badge: "Mapped file",
+        description: "Your file needed a quick column mapping, and Hostlyx prepared it for review.",
+      };
+  }
+}
+
 export function UploadPanel({
   properties,
-  title = "Import Center",
-  subtitle = "Upload an Airbnb export, a Booking.com export, or your generic Hostlyx workbook. Hostlyx will preview, validate, and review the data before saving anything.",
+  title = "Bring your data",
+  subtitle = "Upload your Airbnb, Booking.com, or Excel files to see your real numbers.",
   refreshOnSuccess = true,
   onImportComplete,
+  onCancel,
 }: {
   properties: PropertyDefinition[];
   title?: string;
   subtitle?: string;
   refreshOnSuccess?: boolean;
   onImportComplete?: (payload: { importedFilesCount: number; propertyName: string }) => void;
+  onCancel?: () => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -176,18 +215,10 @@ export function UploadPanel({
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
   const [manualMapping, setManualMapping] = useState<ManualMappingPayload | null>(null);
-  const [reviewSection, setReviewSection] = useState<ReviewSection>("valid");
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "import">("skip");
   const [toast, setToast] = useState<UploadToast | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-
-  const currentReviewRows = useMemo(() => {
-    if (!preview) {
-      return [];
-    }
-
-    return preview.reviewRows[reviewSection].slice(0, 6);
-  }, [preview, reviewSection]);
+  const [committed, setCommitted] = useState<ImportCommittedPayload | null>(null);
 
   const actionableRows = useMemo(() => {
     if (!preview) {
@@ -200,6 +231,18 @@ export function UploadPanel({
       (duplicateStrategy === "import" ? preview.duplicateRows : 0)
     );
   }, [duplicateStrategy, preview]);
+
+  const reviewItems = useMemo(() => {
+    if (!preview) {
+      return [];
+    }
+
+    return [
+      ...preview.reviewRows.errors,
+      ...preview.reviewRows.duplicates,
+      ...preview.reviewRows.warnings,
+    ].slice(0, 8);
+  }, [preview]);
 
   const currentManualMapping = useMemo(() => {
     if (!preview?.manualMapping) {
@@ -235,9 +278,9 @@ export function UploadPanel({
     setSelectedFile(nextFile);
     setPreview(null);
     setManualMapping(null);
-    setReviewSection("valid");
     setDuplicateStrategy("skip");
     setToast(null);
+    setCommitted(null);
     setPhase(nextFile ? "idle" : "idle");
     if (inputRef.current && !nextFile) {
       inputRef.current.value = "";
@@ -290,17 +333,6 @@ export function UploadPanel({
           : null,
       );
       setDuplicateStrategy("skip");
-      setReviewSection(
-        payload.preview.requiresManualMapping
-          ? "warnings"
-          : payload.preview.errorRows > 0
-            ? "errors"
-            : payload.preview.duplicateRows > 0
-              ? "duplicates"
-              : payload.preview.warningRows > 0
-                ? "warnings"
-                : "valid",
-      );
       setPhase("ready");
     } catch (error) {
       setPhase("idle");
@@ -344,8 +376,10 @@ export function UploadPanel({
         message: payload.message ?? "Import completed.",
       });
       setPhase("idle");
+      setCommitted(payload.committed ?? null);
       setSelectedFile(null);
       setPreview(null);
+      setManualMapping(null);
 
       if (inputRef.current) {
         inputRef.current.value = "";
@@ -377,6 +411,15 @@ export function UploadPanel({
     inputRef.current?.click();
   }
 
+  function handleCancel() {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
+
+    resetSelection(null);
+  }
+
   function updateManualField(field: MappingField, value: string) {
     const previewManualMapping = preview?.manualMapping;
 
@@ -395,6 +438,110 @@ export function UploadPanel({
       propertyName: current?.propertyName ?? previewManualMapping.selected.propertyName,
       [field]: value === "" ? null : Number(value),
     }));
+  }
+
+  if (committed) {
+    return (
+      <div className="relative">
+        {toast ? (
+          <div className="pointer-events-none fixed right-4 top-4 z-[70] w-full max-w-md sm:right-6 sm:top-6">
+            <div
+              className={`pointer-events-auto rounded-[24px] border px-4 py-4 shadow-[0_24px_60px_rgba(15,23,42,0.32)] ${
+                toast.tone === "success"
+                  ? "border-emerald-400/24 bg-[rgba(7,28,26,0.96)] text-emerald-100"
+                  : "border-rose-400/24 bg-[rgba(40,12,18,0.96)] text-rose-100"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                {toast.tone === "success" ? (
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    {toast.tone === "success" ? "Import completed" : "Import needs attention"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 opacity-90">{toast.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setToast(null)}
+                  className="rounded-full border border-white/10 p-2 transition hover:bg-white/5"
+                  aria-label="Dismiss import notification"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-6 sm:p-7">
+          <div className="rounded-[28px] border border-emerald-400/18 bg-[radial-gradient(circle_at_top,rgba(125,211,197,0.18),transparent_58%),rgba(255,255,255,0.02)] p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/[0.08] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-100">
+                  <ShieldCheck className="h-4 w-4" />
+                  Import complete
+                </div>
+                <div>
+                  <h3 className="text-3xl font-semibold tracking-[-0.05em] text-[var(--workspace-text)]">
+                    Your data is ready
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--workspace-muted)]">
+                    Your financial overview has been updated.
+                  </p>
+                </div>
+              </div>
+
+              <div className="workspace-soft-card rounded-[24px] px-4 py-4 text-sm text-[var(--workspace-muted)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                  Source
+                </p>
+                <p className="mt-2 text-base font-medium text-[var(--workspace-text)]">{committed.sourceLabel}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {[
+                ["Bookings imported", committed.bookingsImported, "text-[var(--workspace-text)]"],
+                ["Expenses imported", committed.expensesImported, "text-[var(--workspace-text)]"],
+                ["Rows skipped", committed.skippedRows, "text-[var(--workspace-muted)]"],
+              ].map(([label, value, tone]) => (
+                <div
+                  key={String(label)}
+                  className="rounded-[24px] border border-[var(--workspace-border)] bg-[rgba(255,255,255,0.03)] px-5 py-5"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                    {label}
+                  </p>
+                  <p className={`mt-3 text-3xl font-semibold ${tone}`}>{formatCurrency(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="workspace-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition"
+              >
+                Go to dashboard
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => resetSelection(null)}
+                className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
+              >
+                Import another file
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -433,20 +580,31 @@ export function UploadPanel({
         </div>
       ) : null}
 
-      <div className="workspace-card rounded-[30px] p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--workspace-muted)]">
-              {title}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">{subtitle}</p>
+      <div className="workspace-card overflow-hidden rounded-[34px] border border-[var(--workspace-border)] bg-[linear-gradient(180deg,rgba(10,20,38,0.98),rgba(10,18,33,0.96))] p-5 sm:p-7">
+        <div className="absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top,rgba(125,211,197,0.12),transparent_60%)]" />
+        <div className="relative">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--workspace-border)] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--workspace-muted)]">
+                <Sparkles className="h-4 w-4 text-[var(--workspace-accent)]" />
+                Import Center
+              </div>
+              <div>
+                <h2 className="text-3xl font-semibold tracking-[-0.05em] text-[var(--workspace-text)] sm:text-4xl">
+                  {title}
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--workspace-muted)]">{subtitle}</p>
+              </div>
+            </div>
+            <div className="workspace-soft-card rounded-[26px] px-4 py-4 text-right text-sm text-[var(--workspace-muted)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                Supported
+              </p>
+              <p className="mt-2 text-base font-medium text-[var(--workspace-text)]">CSV & XLSX</p>
+            </div>
           </div>
-          <div className="workspace-icon-chip rounded-3xl p-3">
-            <UploadCloud className="h-6 w-6" />
-          </div>
-        </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-8 space-y-6">
           <input
             ref={inputRef}
             type="file"
@@ -482,11 +640,12 @@ export function UploadPanel({
           </div>
 
           <div
-            className={`workspace-soft-card rounded-[24px] border border-dashed p-5 transition ${
+            className={`workspace-soft-card group cursor-pointer rounded-[28px] border border-dashed p-6 transition sm:p-7 ${
               isDragging
                 ? "border-[var(--workspace-accent)] bg-[rgba(125,211,197,0.08)]"
-                : "border-[var(--workspace-border)]"
+                : "border-[var(--workspace-border)] hover:border-[var(--workspace-accent)]/40 hover:bg-white/[0.03]"
             }`}
+            onClick={openFilePicker}
             onDragOver={(event) => {
               event.preventDefault();
               setIsDragging(true);
@@ -507,19 +666,43 @@ export function UploadPanel({
               resetSelection(event.dataTransfer.files?.[0] ?? null);
             }}
           >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[var(--workspace-text)]">
-                  {selectedFile ? selectedFile.name : "Upload one file to preview"}
-                </p>
-                <p className="mt-1 text-sm text-[var(--workspace-muted)]">
-                  {selectedFile
-                    ? `${formatFileSize(selectedFile.size)} • Preview before saving`
-                    : "Supported: Airbnb CSV/XLSX, Booking.com CSV/XLSX, and the generic Hostlyx Excel format."}
-                </p>
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-[var(--workspace-border)] bg-[rgba(125,211,197,0.08)] text-[var(--workspace-accent)]">
+                  {phase === "previewing" || phase === "importing" ? (
+                    <LoaderCircle className="h-6 w-6 animate-spin" />
+                  ) : (
+                    <UploadCloud className="h-6 w-6 transition group-hover:scale-105" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg font-medium text-[var(--workspace-text)]">
+                    {selectedFile ? selectedFile.name : "Drag and drop your file"}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                    {selectedFile
+                      ? `${formatFileSize(selectedFile.size)} uploaded${phase === "previewing" ? " • Analyzing your data..." : ""}`
+                      : "Upload your Airbnb, Booking.com, or Hostlyx Excel export. Hostlyx will preview everything before saving anything."}
+                  </p>
+                  {!selectedFile ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {["Airbnb", "Booking.com", "Excel"].map((entry) => (
+                        <span
+                          key={entry}
+                          className="rounded-full border border-[var(--workspace-border)] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-[var(--workspace-muted)]"
+                        >
+                          {entry}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {phase === "previewing" ? (
+                    <p className="mt-3 text-sm font-medium text-[var(--workspace-text)]">Analyzing your data...</p>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3" onClick={(event) => event.stopPropagation()}>
                 {selectedFile ? (
                   <button
                     type="button"
@@ -534,7 +717,7 @@ export function UploadPanel({
                   onClick={openFilePicker}
                   className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition"
                 >
-                  {selectedFile ? "Replace file" : "Select file"}
+                  {selectedFile ? "Replace file" : "Browse files"}
                 </button>
               </div>
             </div>
@@ -550,66 +733,67 @@ export function UploadPanel({
               {phase === "previewing" ? (
                 <>
                   <LoaderCircle className="h-4 w-4 animate-spin" />
-                  Reading file...
+                  Analyzing your data...
                 </>
               ) : (
                 "Preview import"
               )}
             </button>
 
-            {preview ? (
-              <button
-                type="button"
-                onClick={handleImport}
-                disabled={actionableRows <= 0 || phase === "importing" || phase === "previewing"}
-                className="workspace-button-secondary inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {phase === "importing" ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Saving import...
-                  </>
-                ) : actionableRows > 0 ? (
-                  "Confirm import"
-                ) : (
-                  "Map columns manually"
-                )}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition"
+            >
+              Cancel
+            </button>
           </div>
 
           {preview ? (
-            <div className="workspace-soft-card rounded-[24px] p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
-                    Import preview
-                  </p>
-                  <p className="mt-2 text-base font-medium text-[var(--workspace-text)]">
-                    {preview.sourceLabel}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
-                      ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-100"
-                      : "border-amber-400/24 bg-amber-400/10 text-amber-100"
-                  }`}
-                >
-                  {preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
-                    ? "Ready to import"
-                    : preview.requiresManualMapping
+            <div className="space-y-5">
+              <div className="workspace-soft-card rounded-[28px] border border-[var(--workspace-border)] p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-[var(--workspace-border)] bg-white/[0.04]">
+                      {(() => {
+                        const Icon = getSourcePresentation(preview.source).icon;
+                        return <Icon className="h-5 w-5 text-[var(--workspace-accent)]" />;
+                      })()}
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                        Source detected
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-[var(--workspace-text)]">
+                        {getSourcePresentation(preview.source).badge}
+                      </p>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--workspace-muted)]">
+                        {preview.requiresManualMapping
+                          ? preview.manualMapping?.message
+                          : getSourcePresentation(preview.source).description}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                      preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
+                        ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-100"
+                        : "border-amber-400/24 bg-amber-400/10 text-amber-100"
+                    }`}
+                  >
+                    {preview.requiresManualMapping
                       ? "Manual mapping"
-                      : "Needs review"}
-                </span>
+                      : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
+                        ? "Ready to import"
+                        : "Needs review"}
+                  </span>
+                </div>
               </div>
 
               {preview.manualMapping && currentManualMapping ? (
-                <div className="mt-5 rounded-[20px] border border-[var(--workspace-accent)]/20 bg-[rgba(125,211,197,0.06)] p-4 sm:p-5">
+                <div className="rounded-[28px] border border-[var(--workspace-accent)]/20 bg-[rgba(125,211,197,0.06)] p-5 sm:p-6">
                   <div className="flex flex-col gap-2">
-                    <p className="text-sm font-medium text-[var(--workspace-text)]">
-                      Map your columns
-                    </p>
+                    <p className="text-sm font-medium text-[var(--workspace-text)]">Map your columns</p>
                     <p className="text-sm leading-6 text-[var(--workspace-muted)]">
                       {preview.manualMapping?.message}
                     </p>
@@ -645,7 +829,7 @@ export function UploadPanel({
                     ))}
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-3">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
                     <p className="text-sm text-[var(--workspace-muted)]">
                       {currentManualReady
                         ? "Required fields are mapped. Preview again to continue."
@@ -663,24 +847,21 @@ export function UploadPanel({
                 </div>
               ) : null}
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  ["Rows read", preview.totalRowsRead],
-                  ["Valid rows", preview.validRows],
-                  ["Warning rows", preview.warningRows],
-                  ["Duplicate rows", preview.duplicateRows],
-                  ["Error rows", preview.errorRows],
-                  ["Skipped rows", preview.skippedRows],
-                  ["Expenses", preview.expensesDetected],
-                ].map(([label, value]) => (
+                  ["Bookings detected", preview.importableRows, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                  ["Expenses detected", preview.expensesDetected, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                  ["Warnings", preview.warningRows + preview.errorRows, "text-amber-100", "border-amber-400/20 bg-amber-300/[0.08]"],
+                  ["Duplicates", preview.duplicateRows, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                ].map(([label, value, tone, surface]) => (
                   <div
                     key={label}
-                    className="rounded-[20px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-4"
+                    className={`rounded-[22px] border px-4 py-5 ${surface}`}
                   >
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
                       {label}
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-[var(--workspace-text)]">
+                    <p className={`mt-3 text-3xl font-semibold ${tone}`}>
                       {value}
                     </p>
                   </div>
@@ -688,64 +869,57 @@ export function UploadPanel({
               </div>
 
               {preview.duplicateRows > 0 ? (
-                <div className="mt-5 rounded-[20px] border border-amber-400/20 bg-amber-300/[0.08] p-4">
+                <div className="rounded-[24px] border border-amber-400/20 bg-amber-300/[0.08] p-4 sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-sm font-medium text-amber-100">
-                        Duplicate review
-                      </p>
+                      <p className="text-sm font-medium text-amber-100">Duplicate review</p>
                       <p className="mt-1 text-xs leading-6 text-amber-50/80">
                         Hostlyx found {preview.duplicateRows} booking
                         {preview.duplicateRows === 1 ? "" : "s"} that look already imported or repeated in this
                         file.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDuplicateStrategy("skip")}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                          duplicateStrategy === "skip"
-                            ? "workspace-button-primary"
-                            : "workspace-button-secondary"
-                        }`}
-                      >
-                        Skip duplicates
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDuplicateStrategy("import")}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                          duplicateStrategy === "import"
-                            ? "workspace-button-primary"
-                            : "workspace-button-secondary"
-                        }`}
-                      >
-                        Review and import duplicates
-                      </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-3 text-sm text-amber-50/85">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDuplicateStrategy((current) => (current === "skip" ? "import" : "skip"))
+                          }
+                          className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
+                            duplicateStrategy === "skip"
+                              ? "border-[var(--workspace-accent)] bg-[rgba(125,211,197,0.18)]"
+                              : "border-white/10 bg-white/10"
+                          }`}
+                          aria-pressed={duplicateStrategy === "skip"}
+                        >
+                          <span
+                            className={`h-5 w-5 rounded-full bg-white transition ${
+                              duplicateStrategy === "skip" ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                        Skip duplicates automatically
+                      </label>
                     </div>
                   </div>
                 </div>
               ) : null}
 
-              <div className="mt-5 grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-                <div className="rounded-[20px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="workspace-icon-chip rounded-2xl p-2">
-                      <FileSpreadsheet className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-[var(--workspace-text)]">
-                        First normalized rows
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--workspace-muted)]">
-                        This is what Hostlyx is about to save.
-                      </p>
-                    </div>
+              <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                      Preview
+                    </p>
+                    <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">First normalized rows</p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                      A quick look at the first rows Hostlyx is ready to save.
+                    </p>
                   </div>
 
                   {preview.previewRows.length > 0 ? (
-                    <div className="mt-4 overflow-x-auto">
+                    <div className="mt-5 overflow-x-auto">
                       <table className="min-w-full text-left text-sm">
                         <thead className="text-[11px] uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
                           <tr>
@@ -757,7 +931,7 @@ export function UploadPanel({
                             <th className="pb-3 font-medium">Payout</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[var(--workspace-border)] text-[var(--workspace-text)]">
+                        <tbody className="divide-y divide-[var(--workspace-border)]/70 text-[var(--workspace-text)]">
                           {preview.previewRows.map((row, index) => (
                             <tr key={`${row.guestName}-${row.checkIn}-${index}`}>
                               <td className="py-3 pr-4">{row.guestName || "Guest"}</td>
@@ -772,82 +946,109 @@ export function UploadPanel({
                       </table>
                     </div>
                   ) : (
-                    <div className="mt-4 rounded-[18px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4 text-sm text-[var(--workspace-muted)]">
+                    <div className="mt-5 rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4 text-sm text-[var(--workspace-muted)]">
                       No normalized booking rows are ready yet.
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-[20px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
-                  <p className="text-sm font-medium text-[var(--workspace-text)]">Review</p>
-                  <p className="mt-1 text-xs text-[var(--workspace-muted)]">
-                    Hostlyx separates clean rows from issues so you can decide quickly.
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {([
-                      ["valid", "Valid", preview.validRows],
-                      ["warnings", "Warnings", preview.warningRows],
-                      ["duplicates", "Duplicates", preview.duplicateRows],
-                      ["errors", "Errors", preview.errorRows],
-                    ] as Array<[ReviewSection, string, number]>).map(([section, label, count]) => (
-                      <button
-                        key={section}
-                        type="button"
-                        onClick={() => setReviewSection(section)}
-                        className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
-                          reviewSection === section
-                            ? "border-[var(--workspace-accent)] bg-[rgba(125,211,197,0.12)] text-[var(--workspace-text)]"
-                            : "border-[var(--workspace-border)] bg-white/[0.02] text-[var(--workspace-muted)]"
-                        }`}
-                      >
-                        {label} · {count}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {currentReviewRows.length > 0 ? (
-                      currentReviewRows.map((row) => (
-                        <div
-                          key={row.id}
-                          className={`rounded-[16px] border px-3 py-3 text-sm ${
-                            row.section === "errors"
-                              ? "border-rose-400/18 bg-rose-300/[0.07] text-rose-50/90"
-                              : row.section === "duplicates"
-                                ? "border-amber-400/18 bg-amber-300/[0.07] text-amber-50/90"
-                                : row.section === "warnings"
-                                  ? "border-[var(--workspace-border)] bg-white/[0.03] text-[var(--workspace-text)]"
-                                  : "border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-50/90"
-                          }`}
-                        >
-                          <p className="font-medium">{row.title}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.14em] opacity-70">
-                            {row.subtitle}
-                          </p>
-                          <div className="mt-2 space-y-1">
-                            {row.reasons.slice(0, 2).map((reason) => (
-                              <p key={reason} className="text-sm opacity-85">
-                                {reason}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-[16px] border border-[var(--workspace-border)] bg-white/[0.03] px-3 py-3 text-sm text-[var(--workspace-muted)]">
-                        Nothing is flagged in this section.
+                <div className="space-y-4">
+                  <details
+                    open={preview.warningRows + preview.duplicateRows + preview.errorRows > 0}
+                    className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                          Review
+                        </p>
+                        <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                          Review potential issues
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                          Nothing here blocks the flow unless the row is clearly invalid.
+                        </p>
                       </div>
-                    )}
+                      <ChevronDown className="h-5 w-5 text-[var(--workspace-muted)]" />
+                    </summary>
+
+                    <div className="mt-5 space-y-3">
+                      {reviewItems.length > 0 ? (
+                        reviewItems.map((row) => (
+                          <div
+                            key={row.id}
+                            className={`rounded-[18px] border px-4 py-4 text-sm ${
+                              row.section === "errors"
+                                ? "border-rose-400/18 bg-rose-300/[0.07] text-rose-50/90"
+                                : row.section === "duplicates"
+                                  ? "border-amber-400/18 bg-amber-300/[0.07] text-amber-50/90"
+                                  : "border-[var(--workspace-border)] bg-white/[0.03] text-[var(--workspace-text)]"
+                            }`}
+                          >
+                            <p className="font-medium">{row.title}</p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.14em] opacity-70">{row.subtitle}</p>
+                            <p className="mt-2 text-sm opacity-85">{row.reasons[0]}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-[18px] border border-emerald-400/18 bg-emerald-400/[0.08] px-4 py-4 text-sm text-emerald-50/90">
+                          Your preview looks clean. No issues need attention before import.
+                        </div>
+                      )}
+                    </div>
+                  </details>
+
+                  <div className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                          Ready to continue
+                        </p>
+                        <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                          {actionableRows} row{actionableRows === 1 ? "" : "s"} ready to import
+                        </p>
+                      </div>
+                      <p className="text-sm text-[var(--workspace-muted)]">
+                        {preview.skippedRows > 0 ? `${preview.skippedRows} row${preview.skippedRows === 1 ? "" : "s"} will be skipped.` : "Nothing will be saved until you confirm."}
+                      </p>
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handleImport}
+                        disabled={actionableRows <= 0 || phase === "importing" || phase === "previewing"}
+                        className="workspace-button-primary inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {phase === "importing" ? (
+                          <>
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            Importing data...
+                          </>
+                        ) : actionableRows > 0 ? (
+                          "Import data"
+                        ) : (
+                          "Map columns manually"
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancel}
+                        className="workspace-button-secondary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="workspace-soft-card rounded-[24px] border border-dashed border-[var(--workspace-border)] px-5 py-6 text-sm text-[var(--workspace-muted)]">
-              Upload a file to see detected source, validation results, and a normalized preview before anything is saved.
+            <div className="workspace-soft-card rounded-[28px] border border-[var(--workspace-border)] px-6 py-6 text-sm text-[var(--workspace-muted)]">
+              Upload a file to see detected source, a clean import summary, and a preview before anything is saved.
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>

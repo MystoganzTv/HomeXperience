@@ -895,7 +895,7 @@ export function DashboardShell({
 
       <Modal
         open={isUploadOpen}
-        title="Upload Spreadsheet Data"
+        title="Bring your data"
         onClose={() => setIsUploadOpen(false)}
       >
         <UploadPanel properties={properties} />
