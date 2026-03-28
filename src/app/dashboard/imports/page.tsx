@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { FileSpreadsheet, Layers3 } from "lucide-react";
+import { ImportCenterLauncher } from "@/components/import-center-launcher";
 import { ImportsManager } from "@/components/imports-manager";
 import { SectionCard } from "@/components/section-card";
-import { UploadPanel } from "@/components/upload-panel";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
 import {
@@ -56,7 +56,7 @@ export default async function ImportsPage() {
       latestImport={latestImport}
     >
       <div className="space-y-6">
-        <UploadPanel properties={properties} />
+        <ImportCenterLauncher properties={properties} />
 
         <div className="grid gap-4 md:grid-cols-3">
           <SectionCard title="Imported files">
