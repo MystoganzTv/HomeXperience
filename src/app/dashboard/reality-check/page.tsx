@@ -1,6 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { buildDashboardView, getDashboardFilters } from "@/lib/dashboard";
+import { FilterBar } from "@/components/filter-bar";
+import { RealityCheckPanel } from "@/components/reality-check-panel";
+import { SectionCard } from "@/components/section-card";
+import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthSession } from "@/lib/auth";
+import { buildDashboardView, getDashboardFilters } from "@/lib/dashboard";
 import {
   getBookings,
   getExpenses,
@@ -9,16 +14,13 @@ import {
   getPropertyDefinitions,
   getUserSettings,
 } from "@/lib/db";
-import { FilterBar } from "@/components/filter-bar";
-import { MonthlySummaryPanel } from "@/components/monthly-summary-panel";
-import { WorkspaceShell } from "@/components/workspace-shell";
 import { getRealityCheckSidebarBadge } from "@/lib/reality-check";
 
 export const runtime = "nodejs";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function MonthlyPage({
+export default async function RealityCheckPage({
   searchParams,
 }: {
   searchParams: SearchParams;
@@ -37,14 +39,15 @@ export default async function MonthlyPage({
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, expenses, financialDocuments, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
-    getBookings(ownerEmail),
-    getExpenses(ownerEmail),
-    getFinancialDocuments(ownerEmail),
-    getLatestImport(ownerEmail),
-    getUserSettings(ownerEmail, userName),
-    searchParams,
-  ]);
+  const [bookings, expenses, financialDocuments, latestImport, userSettings, resolvedSearchParams] =
+    await Promise.all([
+      getBookings(ownerEmail),
+      getExpenses(ownerEmail),
+      getFinancialDocuments(ownerEmail),
+      getLatestImport(ownerEmail),
+      getUserSettings(ownerEmail, userName),
+      searchParams,
+    ]);
 
   const filters = getDashboardFilters(
     resolvedSearchParams,
@@ -66,9 +69,9 @@ export default async function MonthlyPage({
 
   return (
     <WorkspaceShell
-      activePage="monthly"
-      pageTitle="Monthly Performance"
-      pageSubtitle="Compare month-by-month results across the selected reporting window."
+      activePage="realityCheck"
+      pageTitle="Reality Check"
+      pageSubtitle="Reconcile expected payout from bookings against what statements say actually landed."
       businessName={userSettings.businessName}
       userName={userName}
       userEmail={ownerEmail}
@@ -88,11 +91,32 @@ export default async function MonthlyPage({
         />
       }
     >
-      <MonthlySummaryPanel
-        view={view}
-        currencyCode={view.displayCurrencyCode}
-        rangeLabel={view.rangeLabel}
-      />
+      <div className="space-y-6">
+        {view.realityCheck ? (
+          <RealityCheckPanel
+            realityCheck={view.realityCheck}
+            currencyCode={view.displayCurrencyCode}
+          />
+        ) : (
+          <SectionCard
+            title="No statement imported yet"
+            subtitle="Import a financial statement to compare booking expectations against real payout."
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="max-w-2xl text-sm leading-7 text-[var(--workspace-muted)]">
+                Reality Check becomes available once Hostlyx has at least one imported financial
+                statement that overlaps the selected reporting period.
+              </p>
+              <Link
+                href="/dashboard/imports"
+                className="workspace-button-primary inline-flex rounded-2xl px-4 py-3 text-sm font-semibold transition"
+              >
+                Go to Import Center
+              </Link>
+            </div>
+          </SectionCard>
+        )}
+      </div>
     </WorkspaceShell>
   );
 }

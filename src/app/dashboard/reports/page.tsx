@@ -4,6 +4,7 @@ import { getAuthSession } from "@/lib/auth";
 import {
   getBookings,
   getExpenses,
+  getFinancialDocuments,
   getLatestImport,
   getPropertyDefinitions,
   getSubscriptionState,
@@ -15,6 +16,7 @@ import { SectionCard } from "@/components/section-card";
 import { SubscriptionUpgradeCard } from "@/components/subscription-upgrade-card";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { getRealityCheckSidebarBadge } from "@/lib/reality-check";
 import { canAccessReports, getSubscriptionBadge } from "@/lib/subscription";
 
 export const runtime = "nodejs";
@@ -40,9 +42,10 @@ export default async function ReportsPage({
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, expenses, latestImport, userSettings, resolvedSearchParams, subscription] = await Promise.all([
+  const [bookings, expenses, financialDocuments, latestImport, userSettings, resolvedSearchParams, subscription] = await Promise.all([
     getBookings(ownerEmail),
     getExpenses(ownerEmail),
+    getFinancialDocuments(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
     searchParams,
@@ -81,6 +84,7 @@ export default async function ReportsPage({
   const view = buildDashboardView({
     bookings,
     expenses,
+    financialDocuments,
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
@@ -98,6 +102,7 @@ export default async function ReportsPage({
       userEmail={ownerEmail}
       currencyCode={view.displayCurrencyCode}
       latestImport={latestImport}
+      realityCheckBadge={getRealityCheckSidebarBadge(view.realityCheck, view.displayCurrencyCode)}
       subscriptionBadge={subscriptionBadge}
       actions={
         <div className="flex flex-col gap-3 xl:items-end">

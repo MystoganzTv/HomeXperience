@@ -13,11 +13,13 @@ import {
 import {
   getBookings,
   getExpenses,
+  getFinancialDocuments,
   getLatestImport,
   getPropertyDefinitions,
   getUserSettings,
 } from "@/lib/db";
 import { formatNumber } from "@/lib/format";
+import { getRealityCheckSidebarBadge } from "@/lib/reality-check";
 
 export const runtime = "nodejs";
 
@@ -42,9 +44,10 @@ export default async function BookingsPage({
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, expenses, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
+  const [bookings, expenses, financialDocuments, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
     getBookings(ownerEmail),
     getExpenses(ownerEmail),
+    getFinancialDocuments(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
     searchParams,
@@ -59,6 +62,7 @@ export default async function BookingsPage({
   const view = buildDashboardView({
     bookings,
     expenses,
+    financialDocuments,
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
@@ -86,6 +90,7 @@ export default async function BookingsPage({
       userEmail={ownerEmail}
       currencyCode={view.displayCurrencyCode}
       latestImport={latestImport}
+      realityCheckBadge={getRealityCheckSidebarBadge(view.realityCheck, view.displayCurrencyCode)}
     >
       <div className="space-y-6">
         <div className="flex justify-end">

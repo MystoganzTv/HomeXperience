@@ -4,6 +4,7 @@ import { getAuthSession } from "@/lib/auth";
 import {
   getBookings,
   getExpenses,
+  getFinancialDocuments,
   getLatestImport,
   getPropertyDefinitions,
   getUserSettings,
@@ -11,6 +12,7 @@ import {
 import { CashflowPanel } from "@/components/cashflow-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { getRealityCheckSidebarBadge } from "@/lib/reality-check";
 
 export const runtime = "nodejs";
 
@@ -35,9 +37,10 @@ export default async function CashflowPage({
     redirect("/dashboard/properties?setup=1");
   }
 
-  const [bookings, expenses, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
+  const [bookings, expenses, financialDocuments, latestImport, userSettings, resolvedSearchParams] = await Promise.all([
     getBookings(ownerEmail),
     getExpenses(ownerEmail),
+    getFinancialDocuments(ownerEmail),
     getLatestImport(ownerEmail),
     getUserSettings(ownerEmail, userName),
     searchParams,
@@ -53,6 +56,7 @@ export default async function CashflowPage({
   const view = buildDashboardView({
     bookings,
     expenses,
+    financialDocuments,
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,
@@ -70,6 +74,7 @@ export default async function CashflowPage({
       userEmail={ownerEmail}
       currencyCode={view.displayCurrencyCode}
       latestImport={latestImport}
+      realityCheckBadge={getRealityCheckSidebarBadge(view.realityCheck, view.displayCurrencyCode)}
       actions={
         <FilterBar
           channels={view.availableChannels}

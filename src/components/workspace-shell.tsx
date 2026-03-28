@@ -15,6 +15,7 @@ import {
   LogOut,
   ReceiptText,
   FileText,
+  Scale,
   Settings2,
   Wallet,
 } from "lucide-react";
@@ -31,6 +32,7 @@ type ActivePage =
   | "bookings"
   | "expenses"
   | "cashflow"
+  | "realityCheck"
   | "performance"
   | "reports"
   | "admin"
@@ -45,6 +47,11 @@ type SubscriptionBadge = {
   tone?: "trial" | "expired" | "starter" | "pro" | "portfolio";
 };
 
+type RealityCheckBadge = {
+  label: string;
+  tone?: "caution" | "neutral";
+};
+
 const baseNavItems: Array<{
   id: ActivePage;
   label: string;
@@ -56,6 +63,7 @@ const baseNavItems: Array<{
   { id: "bookings", label: "Bookings", href: "/dashboard/bookings", icon: BookOpenText },
   { id: "expenses", label: "Expenses", href: "/dashboard/expenses", icon: ReceiptText },
   { id: "cashflow", label: "Cashflow", href: "/dashboard/cashflow", icon: Wallet },
+  { id: "realityCheck", label: "Reality Check", href: "/dashboard/reality-check", icon: Scale },
   { id: "performance", label: "Performance", href: "/dashboard/performance", icon: ChartNoAxesCombined },
   { id: "reports", label: "Reports", href: "/dashboard/reports", icon: FileText },
   { id: "imports", label: "Import Center", href: "/dashboard/imports", icon: DatabaseZap },
@@ -77,6 +85,7 @@ export function WorkspaceShell({
   currencyCode,
   latestImport,
   subscriptionBadge,
+  realityCheckBadge,
   actions,
   children,
 }: {
@@ -89,6 +98,7 @@ export function WorkspaceShell({
   currencyCode: CurrencyCode;
   latestImport: ImportSummary | null;
   subscriptionBadge?: SubscriptionBadge;
+  realityCheckBadge?: RealityCheckBadge | null;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -214,7 +224,17 @@ export function WorkspaceShell({
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!isCollapsed ? <span className="min-w-0 truncate">{item.label}</span> : null}
-                  {activePage === item.id && !isCollapsed ? (
+                  {!isCollapsed && item.id === "realityCheck" && realityCheckBadge ? (
+                    <span
+                      className={`ml-auto shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                        realityCheckBadge.tone === "caution"
+                          ? "border border-amber-200/14 bg-amber-300/10 text-amber-50"
+                          : "border border-white/10 bg-white/[0.04] text-[var(--workspace-muted)]"
+                      }`}
+                    >
+                      {realityCheckBadge.label}
+                    </span>
+                  ) : activePage === item.id && !isCollapsed ? (
                     <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--workspace-accent)]" />
                   ) : null}
                 </Link>
