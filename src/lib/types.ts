@@ -39,6 +39,7 @@ export type BookingRecord = {
   discount: number;
   rentalRevenue: number;
   cleaningFee: number;
+  taxAmount: number;
   totalRevenue: number;
   hostFee: number;
   payout: number;

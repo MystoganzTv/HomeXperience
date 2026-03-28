@@ -76,6 +76,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
       const payoutMoney = parseMoney(getCell(row, selectedIndexes.payout));
       const feeMoney = parseMoney(getCell(row, selectedIndexes.platformFee));
       const cleaningMoney = parseMoney(getCell(row, selectedIndexes.cleaningFee));
+      const taxMoney = parseMoney(getCell(row, selectedIndexes.taxAmount));
       const explicitNights = parseNights(getCell(row, selectedIndexes.nights));
       const checkInMeta = parseImportDateDetailed(getCell(row, selectedIndexes.checkIn), {
         datePreference,
@@ -113,6 +114,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
         grossRevenue,
         platformFee,
         cleaningFee: Math.max(0, cleaningMoney.value),
+        taxAmount: Math.max(0, Math.abs(taxMoney.value)),
         payout,
         currency: inferCurrency(
           String(getCell(row, selectedIndexes.currency) ?? "").trim(),
@@ -120,6 +122,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
           payoutMoney.currency,
           feeMoney.currency,
           cleaningMoney.currency,
+          taxMoney.currency,
         ),
         status: String(getCell(row, selectedIndexes.status) ?? "").trim() || "Booked",
         rawRow: toRawRow(headers, row),
@@ -135,6 +138,7 @@ export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormaliz
         malformedOptionalMoneyFields: [
           feeMoney.malformed ? "platform fee" : "",
           cleaningMoney.malformed ? "cleaning fee" : "",
+          taxMoney.malformed ? "taxes" : "",
         ].filter(Boolean),
         ambiguousDateFields: [
           checkInMeta.ambiguous ? "check-in" : "",

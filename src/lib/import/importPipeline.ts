@@ -619,6 +619,7 @@ export function mapPreviewToHostlyxRecords(
         discount: 0,
         rentalRevenue: booking.grossRevenue,
         cleaningFee: booking.cleaningFee,
+        taxAmount: booking.taxAmount,
         totalRevenue: booking.grossRevenue,
         hostFee: booking.platformFee,
         payout: booking.payout,

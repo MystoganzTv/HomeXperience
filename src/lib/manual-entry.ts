@@ -42,6 +42,7 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
   const extraFee = parseMoney(formData.get("extraFee"));
   const discount = parseMoney(formData.get("discount"));
   const cleaningFee = parseMoney(formData.get("cleaningFee"));
+  const taxAmount = parseMoney(formData.get("taxAmount"));
   const hostFee = parseMoney(formData.get("hostFee"));
   const rentalRevenue = Number((nights * pricePerNight).toFixed(2));
   const totalRevenue = Number(
@@ -64,6 +65,7 @@ export function normalizeManualBooking(formData: FormData): BookingRecord {
     discount,
     rentalRevenue,
     cleaningFee,
+    taxAmount,
     totalRevenue,
     hostFee,
     payout,

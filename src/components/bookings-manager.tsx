@@ -324,6 +324,10 @@ export function BookingsManager({
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Cleaning fee</span>
               <input className={inputClassName()} type="number" min="0" step="0.01" name="cleaningFee" defaultValue={editingBooking.cleaningFee} />
             </label>
+            <label className="space-y-2">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Taxes</span>
+              <input className={inputClassName()} type="number" min="0" step="0.01" name="taxAmount" defaultValue={editingBooking.taxAmount} />
+            </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Host fee</span>
               <input className={inputClassName()} type="number" min="0" step="0.01" name="hostFee" defaultValue={editingBooking.hostFee} />

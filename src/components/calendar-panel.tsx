@@ -458,7 +458,7 @@ export function CalendarPanel({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <div className="workspace-soft-card rounded-[22px] p-4">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Gross revenue</p>
                 <p className="mt-2 text-xl font-semibold text-[var(--workspace-text)]">
@@ -475,6 +475,12 @@ export function CalendarPanel({
                 <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Host fee</p>
                 <p className="mt-2 text-xl font-semibold text-[var(--workspace-text)]">
                   {formatCurrency(selectedBooking.hostFee, false, currencyCode)}
+                </p>
+              </div>
+              <div className="workspace-soft-card rounded-[22px] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Taxes</p>
+                <p className="mt-2 text-xl font-semibold text-[var(--workspace-text)]">
+                  {formatCurrency(selectedBooking.taxAmount, false, currencyCode)}
                 </p>
               </div>
               <div className="workspace-soft-card rounded-[22px] p-4">

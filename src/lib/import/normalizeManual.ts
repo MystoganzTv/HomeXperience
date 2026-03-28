@@ -72,6 +72,7 @@ export function normalizeManual(
             ? grossMoney.value - payoutMoney.value
             : 0,
         cleaningFee: 0,
+        taxAmount: 0,
         payout: payoutMoney.value,
         currency: inferCurrency(grossMoney.currency, payoutMoney.currency),
         status: "Booked",

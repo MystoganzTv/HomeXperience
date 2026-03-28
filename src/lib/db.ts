@@ -243,6 +243,7 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       discount REAL NOT NULL,
       rental_revenue REAL NOT NULL,
       cleaning_fee REAL NOT NULL,
+      tax_amount REAL NOT NULL DEFAULT 0,
       total_revenue REAL NOT NULL,
       host_fee REAL NOT NULL,
       payout REAL NOT NULL,
@@ -424,6 +425,10 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
 
   if (!hasColumn(db, "bookings", "overbooking_status")) {
     db.exec("ALTER TABLE bookings ADD COLUMN overbooking_status TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "bookings", "tax_amount")) {
+    db.exec("ALTER TABLE bookings ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0;");
   }
 
   if (!hasColumn(db, "imports", "imported_source")) {
@@ -773,6 +778,10 @@ async function initializePostgresSchema() {
         ADD COLUMN IF NOT EXISTS overbooking_status TEXT NOT NULL DEFAULT ''
       `);
       await pool.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
         ALTER TABLE expenses
         ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
       `);
@@ -884,6 +893,7 @@ function mapBookingRecord(row: Record<string, unknown>): BookingRecord {
     discount: Number(getRowValue(row, "discount")),
     rentalRevenue,
     cleaningFee: Number(getRowValue(row, "cleaningFee", "cleaningfee")),
+    taxAmount: Number(getRowValue(row, "taxAmount", "taxamount")),
     totalRevenue: Number(getRowValue(row, "totalRevenue", "totalrevenue")),
     hostFee: Number(getRowValue(row, "hostFee", "hostfee")),
     payout: Number(getRowValue(row, "payout")),
@@ -1035,6 +1045,7 @@ function cloneBookingRecord(booking: StoredBooking): BookingRecord {
     discount: booking.discount,
     rentalRevenue: booking.rentalRevenue,
     cleaningFee: booking.cleaningFee,
+    taxAmount: booking.taxAmount,
     totalRevenue: booking.totalRevenue,
     hostFee: booking.hostFee,
     payout: booking.payout,
@@ -1521,6 +1532,7 @@ export async function appendImportData({
             discount,
             rental_revenue AS rentalRevenue,
             cleaning_fee AS cleaningFee,
+            tax_amount AS taxAmount,
             total_revenue AS totalRevenue,
             host_fee AS hostFee,
             payout,
@@ -1633,9 +1645,9 @@ export async function appendImportData({
             INSERT INTO bookings (
               owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
               imported_source, channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-              cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+              cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
           `,
           [
             normalizedEmail,
@@ -1655,6 +1667,7 @@ export async function appendImportData({
             booking.discount,
             booking.rentalRevenue,
             booking.cleaningFee,
+            booking.taxAmount,
             booking.totalRevenue,
             booking.hostFee,
             booking.payout,
@@ -1859,6 +1872,7 @@ export async function appendImportData({
             discount,
             rental_revenue AS rentalRevenue,
             cleaning_fee AS cleaningFee,
+            tax_amount AS taxAmount,
             total_revenue AS totalRevenue,
             host_fee AS hostFee,
             payout,
@@ -1966,9 +1980,9 @@ export async function appendImportData({
       INSERT INTO bookings (
         owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
         imported_source, channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-        cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+        cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertExpense = db.prepare(`
@@ -2003,6 +2017,7 @@ export async function appendImportData({
         booking.discount,
         booking.rentalRevenue,
         booking.cleaningFee,
+        booking.taxAmount,
         booking.totalRevenue,
         booking.hostFee,
         booking.payout,
@@ -2463,6 +2478,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           discount,
           rental_revenue AS rentalRevenue,
           cleaning_fee AS cleaningFee,
+          tax_amount AS taxAmount,
           total_revenue AS totalRevenue,
           host_fee AS hostFee,
           payout,
@@ -2510,6 +2526,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           discount,
           rental_revenue AS rentalRevenue,
           cleaning_fee AS cleaningFee,
+          tax_amount AS taxAmount,
           total_revenue AS totalRevenue,
           host_fee AS hostFee,
           payout,
@@ -3348,9 +3365,9 @@ export async function insertManualBooking({
         INSERT INTO bookings (
           owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-          cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+          cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
         )
-        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        VALUES ($1, 0, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         RETURNING id
       `,
       [
@@ -3368,6 +3385,7 @@ export async function insertManualBooking({
         booking.discount,
         booking.rentalRevenue,
         booking.cleaningFee,
+        booking.taxAmount,
         booking.totalRevenue,
         booking.hostFee,
         booking.payout,
@@ -3403,9 +3421,9 @@ export async function insertManualBooking({
         INSERT INTO bookings (
           owner_email, import_id, source, property_name, unit_name, check_in, checkout, guest_name, guest_count,
           channel, rental_period, price_per_night, extra_fee, discount, rental_revenue,
-          cleaning_fee, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
+          cleaning_fee, tax_amount, total_revenue, host_fee, payout, nights, booking_number, overbooking_status
         )
-        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, 0, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
@@ -3423,6 +3441,7 @@ export async function insertManualBooking({
       booking.discount,
       booking.rentalRevenue,
       booking.cleaningFee,
+      booking.taxAmount,
       booking.totalRevenue,
       booking.hostFee,
       booking.payout,
@@ -3539,12 +3558,13 @@ export async function updateBookingRecord({
           discount = $13,
           rental_revenue = $14,
           cleaning_fee = $15,
-          total_revenue = $16,
-          host_fee = $17,
-          payout = $18,
-          nights = $19,
-          booking_number = $20,
-          overbooking_status = $21
+          tax_amount = $16,
+          total_revenue = $17,
+          host_fee = $18,
+          payout = $19,
+          nights = $20,
+          booking_number = $21,
+          overbooking_status = $22
         WHERE id = $1 AND owner_email = $2
       `,
       [
@@ -3563,6 +3583,7 @@ export async function updateBookingRecord({
         booking.discount,
         booking.rentalRevenue,
         booking.cleaningFee,
+        booking.taxAmount,
         booking.totalRevenue,
         booking.hostFee,
         booking.payout,
@@ -3615,6 +3636,7 @@ export async function updateBookingRecord({
         discount = ?,
         rental_revenue = ?,
         cleaning_fee = ?,
+        tax_amount = ?,
         total_revenue = ?,
         host_fee = ?,
         payout = ?,
@@ -3637,6 +3659,7 @@ export async function updateBookingRecord({
     booking.discount,
     booking.rentalRevenue,
     booking.cleaningFee,
+    booking.taxAmount,
     booking.totalRevenue,
     booking.hostFee,
     booking.payout,

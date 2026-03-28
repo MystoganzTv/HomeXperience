@@ -75,6 +75,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
       const payoutMoney = parseMoney(getCell(row, selectedIndexes.payout));
       const feeMoney = parseMoney(getCell(row, selectedIndexes.platformFee));
       const cleaningMoney = parseMoney(getCell(row, selectedIndexes.cleaningFee));
+      const taxMoney = parseMoney(getCell(row, selectedIndexes.taxAmount));
       const explicitNights = parseNights(getCell(row, selectedIndexes.nights));
       const checkInMeta = parseImportDateDetailed(getCell(row, selectedIndexes.checkIn), {
         datePreference,
@@ -105,9 +106,10 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
         grossRevenue:
           grossMoney.value > 0
             ? grossMoney.value
-            : Math.max(0, payoutMoney.value + Math.max(0, feeMoney.value)),
-        platformFee: Math.max(0, feeMoney.value),
+            : Math.max(0, payoutMoney.value + Math.abs(feeMoney.value)),
+        platformFee: Math.max(0, Math.abs(feeMoney.value)),
         cleaningFee: Math.max(0, cleaningMoney.value),
+        taxAmount: Math.max(0, Math.abs(taxMoney.value)),
         payout: payoutMoney.value,
         currency: inferCurrency(
           String(getCell(row, selectedIndexes.currency) ?? "").trim(),
@@ -115,6 +117,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
           payoutMoney.currency,
           feeMoney.currency,
           cleaningMoney.currency,
+          taxMoney.currency,
         ),
         status: String(getCell(row, selectedIndexes.status) ?? "").trim() || "Booked",
         rawRow: toRawRow(headers, row),
@@ -130,6 +133,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
         malformedOptionalMoneyFields: [
           feeMoney.malformed ? "platform fee" : "",
           cleaningMoney.malformed ? "cleaning fee" : "",
+          taxMoney.malformed ? "taxes" : "",
         ].filter(Boolean),
         ambiguousDateFields: [
           checkInMeta.ambiguous ? "check-in" : "",

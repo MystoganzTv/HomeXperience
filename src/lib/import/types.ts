@@ -43,6 +43,7 @@ export type NormalizedImportBooking = {
   grossRevenue: number;
   platformFee: number;
   cleaningFee: number;
+  taxAmount: number;
   payout: number;
   currency: string;
   status: string;
