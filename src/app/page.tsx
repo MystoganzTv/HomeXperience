@@ -61,17 +61,17 @@ const features = [
   {
     icon: LayoutDashboard,
     title: "Beneficio real",
-    description: "Ve exactamente cuánto dinero te queda después de todo.",
+    description: "Ve con claridad financiera cuánto dinero te queda después de todo.",
   },
   {
     icon: BarChart3,
     title: "Gastos bajo control",
-    description: "Identifica qué está reduciendo tu rentabilidad.",
+    description: "Identifica qué está reduciendo tu beneficio real.",
   },
   {
     icon: Tags,
     title: "Impuestos claros",
-    description: "Calcula cuánto debes apartar antes de que sea tarde.",
+    description: "Calcula cuánto debes apartar y por qué tu dinero no siempre coincide.",
   },
   {
     icon: GitCompare,
@@ -86,7 +86,25 @@ const features = [
   {
     icon: ArrowDownUp,
     title: "Flujo de caja",
-    description: "Entiende cuándo entra y sale tu dinero.",
+    description: "Entiende cuándo entra y sale tu dinero y qué terminas cobrando de verdad.",
+  },
+];
+
+const alertSignals = [
+  {
+    icon: TrendingDown,
+    title: "Expenses are growing faster than revenue",
+    description: "Detecta presión operativa antes de que se coma lo que realmente te quedas.",
+  },
+  {
+    icon: Tags,
+    title: "Taxes are reducing your take-home significantly",
+    description: "Ve cuándo los impuestos están golpeando fuerte tu beneficio real.",
+  },
+  {
+    icon: GitCompare,
+    title: "You are relying heavily on one channel",
+    description: "Entiende si Airbnb, Booking o un solo origen domina demasiado tu negocio.",
   },
 ];
 
@@ -215,6 +233,95 @@ export default async function LandingPage() {
         </section>
 
         <section id="problem" className="mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 sm:py-28 xl:px-8">
+          <section className="mx-auto mb-24 w-full max-w-7xl px-0 sm:mb-28">
+            <div className="overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,23,39,0.82)_0%,rgba(8,17,28,0.72)_100%)] shadow-[0_24px_60px_rgba(2,6,23,0.22)]">
+              <div className="grid gap-8 px-6 py-8 lg:grid-cols-[1.15fr_0.85fr] lg:px-10 lg:py-10">
+                <div>
+                  <span className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent-text)]">
+                    Reconciliation
+                  </span>
+                  <h2 className="mt-4 max-w-xl text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl">
+                    Your numbers don&apos;t match. Here&apos;s why.
+                  </h2>
+                  <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">
+                    Hostlyx compares what you should receive with what you actually get and shows exactly where the money goes.
+                  </p>
+                  <p className="mt-5 text-base leading-7 text-slate-400">
+                    Fees, taxes, and adjustments. Finally explained.
+                  </p>
+                </div>
+
+                <div className="rounded-[28px] border border-[var(--accent-soft-strong)] bg-[linear-gradient(180deg,rgba(88,196,182,0.08)_0%,rgba(17,28,44,0.88)_42%,rgba(11,22,37,0.96)_100%)] p-6">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    Reality check
+                  </p>
+                  <div className="mt-6 space-y-4">
+                    <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Expected payout</p>
+                        <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-slate-100">€8,110</p>
+                      </div>
+                      <GitCompare className="h-5 w-5 text-[var(--accent)]" />
+                    </div>
+                    <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Actual payout</p>
+                        <p className="mt-2 text-3xl font-semibold tracking-[-0.06em] text-slate-100">€7,500</p>
+                      </div>
+                      <CircleCheckBig className="h-5 w-5 text-[var(--accent)]" />
+                    </div>
+                    <div className="flex items-end justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Difference</p>
+                        <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-amber-200">-€610</p>
+                      </div>
+                      <p className="max-w-[11rem] text-right text-sm leading-6 text-slate-400">
+                        Why your money doesn&apos;t match is finally visible.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="mx-auto mb-24 w-full max-w-7xl px-0 sm:mb-28">
+            <div className="overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,23,39,0.76)_0%,rgba(8,17,28,0.62)_100%)] px-6 py-8 lg:px-10 lg:py-10">
+              <div className="max-w-2xl">
+                <span className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent-text)]">
+                  Alerts
+                </span>
+                <h2 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl">
+                  Stop guessing. Start knowing what to fix.
+                </h2>
+                <p className="mt-4 text-lg leading-8 text-slate-300">
+                  Hostlyx highlights what matters so you can act.
+                </p>
+              </div>
+
+              <div className="mt-10 grid gap-5 lg:grid-cols-3">
+                {alertSignals.map((signal) => {
+                  const Icon = signal.icon;
+
+                  return (
+                    <article
+                      key={signal.title}
+                      className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,44,0.78)_0%,rgba(10,19,31,0.68)_100%)] p-6"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--accent-soft-strong)] bg-[var(--accent-soft)]">
+                        <Icon className="h-4 w-4 text-[var(--accent-text)]" />
+                      </div>
+                      <h3 className="mt-5 text-lg font-semibold leading-7 text-slate-100">{signal.title}</h3>
+                      <p className="mt-3 text-sm leading-7 text-slate-400">{signal.description}</p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <p className="mt-8 text-sm font-medium text-slate-300">Clear signals. No noise.</p>
+            </div>
+          </section>
+
           <div className="text-center">
             <span className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent-text)]">
               El problema
@@ -260,7 +367,7 @@ export default async function LandingPage() {
                 Lo único que importa: lo que realmente te quedas.
               </h2>
               <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-300">
-                Hostlyx convierte tus ingresos, gastos e impuestos en una sola cifra clara: tu beneficio real.
+                Hostlyx convierte tus ingresos, gastos e impuestos en una sola cifra clara: tu beneficio real y por qué tu dinero no siempre coincide.
               </p>
               <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-400">
                 Sin hojas de cálculo. Sin suposiciones. Sin autoengaños.
@@ -331,6 +438,9 @@ export default async function LandingPage() {
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-slate-100 sm:text-4xl lg:text-5xl">
               Todo lo que necesitas para entender tu negocio
             </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-300">
+              Financial clarity, real profit, and what you actually keep in one place.
+            </p>
           </div>
 
           <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
