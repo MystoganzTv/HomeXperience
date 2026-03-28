@@ -233,6 +233,22 @@ export function UploadPanel({
     );
   }, [duplicateStrategy, preview]);
 
+  const importButtonLabel = useMemo(() => {
+    if (phase === "importing") {
+      return "Importing data...";
+    }
+
+    if (!preview) {
+      return "Import data";
+    }
+
+    if (actionableRows > 0) {
+      return `Import ${actionableRows} clean row${actionableRows === 1 ? "" : "s"}`;
+    }
+
+    return "Map columns manually";
+  }, [actionableRows, phase, preview]);
+
   const reviewItems = useMemo(() => {
     if (!preview) {
       return [];
@@ -927,8 +943,24 @@ export function UploadPanel({
                       <p className={`mt-3 text-3xl font-semibold ${tone}`}>
                         {value}
                       </p>
+                      {label === "Errors" && preview.errorRows > 0 ? (
+                        <p className="mt-2 text-xs leading-5 text-rose-100/75">These rows will be skipped unless you fix the source file.</p>
+                      ) : null}
                     </div>
                   ))}
+                </div>
+              ) : null}
+
+              {!needsFocusedMapping && preview.errorRows > 0 ? (
+                <div className="rounded-[24px] border border-rose-400/18 bg-rose-300/[0.07] p-4 sm:p-5">
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm font-medium text-rose-50/95">
+                      {actionableRows} row{actionableRows === 1 ? "" : "s"} are ready. {preview.errorRows} row{preview.errorRows === 1 ? "" : "s"} still need changes in the source file.
+                    </p>
+                    <p className="text-sm leading-6 text-rose-50/75">
+                      You can continue now and Hostlyx will import the clean rows only, or fix those specific rows in the spreadsheet and upload again.
+                    </p>
+                  </div>
                 </div>
               ) : null}
 
@@ -1031,7 +1063,7 @@ export function UploadPanel({
                           Review potential issues
                         </p>
                         <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
-                          Nothing here blocks the flow unless the row is clearly invalid.
+                          Errors need a quick fix in the source file. Valid rows can still be imported right away.
                         </p>
                       </div>
                       <ChevronDown className="h-5 w-5 text-[var(--workspace-muted)]" />
@@ -1051,8 +1083,15 @@ export function UploadPanel({
                             }`}
                           >
                             <p className="font-medium">{row.title}</p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.14em] opacity-70">{row.subtitle}</p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.14em] opacity-70">
+                              Row {row.rowIndex} • {row.subtitle}
+                            </p>
                             <p className="mt-2 text-sm opacity-85">{row.reasons[0]}</p>
+                            {row.section === "errors" ? (
+                              <p className="mt-2 text-xs uppercase tracking-[0.12em] opacity-65">
+                                Fix this row in the source file and upload again if you want it included.
+                              </p>
+                            ) : null}
                           </div>
                         ))
                       ) : (
@@ -1070,11 +1109,15 @@ export function UploadPanel({
                           Ready to continue
                         </p>
                         <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
-                          {actionableRows} row{actionableRows === 1 ? "" : "s"} ready to import
+                          {actionableRows} clean row{actionableRows === 1 ? "" : "s"} ready to import
                         </p>
                       </div>
                       <p className="text-sm text-[var(--workspace-muted)]">
-                        {preview.skippedRows > 0 ? `${preview.skippedRows} row${preview.skippedRows === 1 ? "" : "s"} will be skipped.` : "Nothing will be saved until you confirm."}
+                        {preview.errorRows > 0
+                          ? `${preview.errorRows} error row${preview.errorRows === 1 ? "" : "s"} will be skipped automatically.`
+                          : preview.skippedRows > 0
+                            ? `${preview.skippedRows} row${preview.skippedRows === 1 ? "" : "s"} will be skipped.`
+                            : "Nothing will be saved until you confirm."}
                       </p>
                     </div>
 
@@ -1088,10 +1131,10 @@ export function UploadPanel({
                         {phase === "importing" ? (
                           <>
                             <LoaderCircle className="h-4 w-4 animate-spin" />
-                            Importing data...
+                            {importButtonLabel}
                           </>
                         ) : actionableRows > 0 ? (
-                          "Import data"
+                          importButtonLabel
                         ) : (
                           "Map columns manually"
                         )}
