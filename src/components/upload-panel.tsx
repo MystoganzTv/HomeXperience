@@ -286,6 +286,10 @@ export function UploadPanel({
       return 0;
     }
 
+    if (preview.source === "financial_statement") {
+      return preview.canImport && preview.financialStatement ? 1 : 0;
+    }
+
     return (
       preview.validRows +
       preview.warningRows +
