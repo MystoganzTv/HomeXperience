@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Edit3, Trash2 } from "lucide-react";
 import { PropertyUnitFieldGroup } from "@/components/property-unit-field-group";
 import { WorkspaceDateField } from "@/components/workspace-date-field";
@@ -39,19 +39,24 @@ export function BookingsManager({
   highlightedBookingKey?: string | null;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [editingBooking, setEditingBooking] = useState<BookingRecord | null>(null);
   const [bookingToDelete, setBookingToDelete] = useState<BookingRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeHighlightedBookingKey, setActiveHighlightedBookingKey] = useState<string | null>(
+    highlightedBookingKey ?? null,
+  );
   const bookingRowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const highlightedBooking = useMemo(
     () =>
-      highlightedBookingKey
-        ? bookings.find((booking) => getBookingSelectionKey(booking) === highlightedBookingKey) ?? null
+      activeHighlightedBookingKey
+        ? bookings.find((booking) => getBookingSelectionKey(booking) === activeHighlightedBookingKey) ?? null
         : null,
-    [bookings, highlightedBookingKey],
+    [activeHighlightedBookingKey, bookings],
   );
 
   useEffect(() => {
@@ -59,14 +64,33 @@ export function BookingsManager({
       return;
     }
 
-    const row = bookingRowRefs.current.get(highlightedBookingKey);
+    setActiveHighlightedBookingKey(highlightedBookingKey);
+  }, [highlightedBookingKey]);
+
+  useEffect(() => {
+    if (!activeHighlightedBookingKey) {
+      return;
+    }
+
+    const row = bookingRowRefs.current.get(activeHighlightedBookingKey);
 
     if (!row) {
       return;
     }
 
     row.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [highlightedBookingKey]);
+
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("booking");
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+
+    const timeoutId = window.setTimeout(() => {
+      setActiveHighlightedBookingKey(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeHighlightedBookingKey, pathname, router, searchParams]);
 
   function submitUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,7 +189,7 @@ export function BookingsManager({
             <tbody>
               {bookings.map((booking) => {
                 const bookingKey = getBookingSelectionKey(booking);
-                const isHighlighted = highlightedBookingKey === bookingKey;
+                const isHighlighted = activeHighlightedBookingKey === bookingKey;
 
                 return (
                 <tr
