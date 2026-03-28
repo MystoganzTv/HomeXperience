@@ -206,6 +206,7 @@ function MonthCalendar({
                     const dayKey = format(day, "yyyy-MM-dd");
                     const dayClosure = closures.find((closure) => closure.date === dayKey);
                     const isCurrentMonth = isSameMonth(day, anchorDate);
+                    const monthChipLabel = format(day, "MMM");
 
                     return (
                       <article
@@ -226,7 +227,11 @@ function MonthCalendar({
                           >
                             {format(day, "d")}
                           </p>
-                          {dayClosure ? (
+                          {!isCurrentMonth ? (
+                            <span className="rounded-full border border-white/6 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-muted)]/90">
+                              {monthChipLabel}
+                            </span>
+                          ) : dayClosure ? (
                             <span className="h-2.5 w-2.5 rounded-full bg-amber-200/80" />
                           ) : null}
                         </div>
@@ -336,16 +341,25 @@ export function CalendarPanel({
           );
 
           return (
-            <MonthCalendar
-              key={monthKey}
-              anchorDate={anchorDate}
-              bookings={monthBookings}
-              closures={monthClosures}
-              currencyCode={currencyCode}
-              compact={showOverviewGrid}
-              abbreviatedTitle={isYearGrid}
-              onSelectBooking={setSelectedBooking}
-            />
+            <div key={monthKey} className="space-y-4">
+              <div className="flex items-center gap-4 px-1">
+                <div className="h-px flex-1 bg-[linear-gradient(90deg,rgba(148,163,184,0.04),rgba(148,163,184,0.18),rgba(148,163,184,0.04))]" />
+                <span className="rounded-full border border-[var(--workspace-border)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                  {format(anchorDate, "MMMM yyyy")}
+                </span>
+                <div className="h-px flex-1 bg-[linear-gradient(90deg,rgba(148,163,184,0.04),rgba(148,163,184,0.18),rgba(148,163,184,0.04))]" />
+              </div>
+
+              <MonthCalendar
+                anchorDate={anchorDate}
+                bookings={monthBookings}
+                closures={monthClosures}
+                currencyCode={currencyCode}
+                compact={showOverviewGrid}
+                abbreviatedTitle={isYearGrid}
+                onSelectBooking={setSelectedBooking}
+              />
+            </div>
           );
         })}
       </div>
