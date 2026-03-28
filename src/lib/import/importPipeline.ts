@@ -1,6 +1,7 @@
 import type { BookingRecord, ExpenseRecord, ImportedFileSource } from "@/lib/types";
 import { detectDuplicateBookings } from "./dedupe";
 import { detectSource } from "./detectSource";
+import { extractFinancialStatement } from "./financialStatement";
 import { normalizeAirbnb } from "./normalizeAirbnb";
 import { normalizeBooking } from "./normalizeBooking";
 import { normalizeGeneric } from "./normalizeGeneric";
@@ -358,28 +359,32 @@ export function buildImportPreview(
   const manualMapping = buildManualMappingPreview(workbook, options?.manualMapping);
   const shouldUseManualMapping = Boolean(options?.manualMapping && manualMapping?.requiredReady);
 
-  if (source === "airbnb_invoice") {
+  if (source === "financial_statement") {
+    const statement = extractFinancialStatement(workbook);
     const blockMessage =
-      "This looks like an Airbnb invoice/tax file, not a reservations export. Use an Airbnb reservations or earnings export to import bookings.";
+      "This looks like a financial statement, not individual bookings.";
 
     return {
       source,
       sourceLabel: getDetectedSourceLabel(source),
       fileName,
       requiresManualMapping: false,
-      blocksImport: true,
-      blockMessage,
+      blocksImport: !statement,
+      blockMessage: statement
+        ? blockMessage
+        : "This looks like a financial statement, but Hostlyx could not read a payout total yet.",
       manualMapping: null,
       totalRowsRead: workbook.sheets.reduce((sum, sheet) => sum + Math.max(0, sheet.rows.length - 1), 0),
-      validRows: 0,
+      validRows: statement ? 1 : 0,
       warningRows: 0,
       duplicateRows: 0,
       errorRows: 0,
       skippedRows: 0,
       expensesDetected: 0,
-      importableRows: 0,
+      importableRows: statement ? 1 : 0,
       bookings: [],
       expenses: [],
+      financialStatement: statement,
       previewRows: [],
       reviewRows: {
         valid: [],
@@ -391,13 +396,13 @@ export function buildImportPreview(
         {
           rowType: "file",
           rowIndex: 0,
-          code: "airbnb_invoice_file",
+          code: "financial_statement_file",
           message: blockMessage,
           severity: "warning",
         },
       ],
       duplicates: [],
-      canImport: false,
+      canImport: Boolean(statement),
     };
   }
 
@@ -420,6 +425,7 @@ export function buildImportPreview(
       importableRows: 0,
       bookings: [],
       expenses: [],
+      financialStatement: null,
       previewRows: [],
       reviewRows: {
         valid: [],
@@ -557,6 +563,7 @@ export function buildImportPreview(
     importableRows,
     bookings: bookingRows,
     expenses: normalized.expenses,
+    financialStatement: null,
     previewRows: bookingRows
       .filter((row) => !hasBlockingIssues(row.warnings))
       .slice(0, 5)
@@ -581,6 +588,8 @@ export function mapDetectedSourceToStoredSource(source: ImportDetectedSource): I
       return "airbnb";
     case "booking":
       return "booking_com";
+    case "financial_statement":
+      return "financial_statement";
     default:
       return "generic_excel";
   }

@@ -45,7 +45,7 @@ type ParsedImportFile = {
 };
 
 type SheetDetectionCandidate = {
-  source: Exclude<ImportedFileSource, "hostlyx_excel">;
+  source: Exclude<ImportedFileSource, "hostlyx_excel" | "financial_statement">;
   sheetName: string;
   headerRowIndex: number;
   indexes: OptionalIndexMap<ProviderColumnKey>;
@@ -195,7 +195,7 @@ const sharedProviderColumns: Record<ProviderColumnKey, readonly string[]> = {
 };
 
 const providerDetectionProfiles: Record<
-  Exclude<ImportedFileSource, "hostlyx_excel">,
+  Exclude<ImportedFileSource, "hostlyx_excel" | "financial_statement">,
   {
     label: string;
     filenameHints: string[];
@@ -265,6 +265,8 @@ function getImportedSourceLabel(source: ImportedFileSource) {
       return "Booking.com";
     case "hostlyx_excel":
       return "Generic Excel";
+    case "financial_statement":
+      return "Financial statement";
     default:
       return "Generic Excel";
   }
@@ -806,7 +808,10 @@ function detectProviderSheet(
       }
 
       for (const [source, profile] of Object.entries(providerDetectionProfiles) as Array<
-        [Exclude<ImportedFileSource, "hostlyx_excel">, (typeof providerDetectionProfiles)[Exclude<ImportedFileSource, "hostlyx_excel">]]
+        [
+          Exclude<ImportedFileSource, "hostlyx_excel" | "financial_statement">,
+          (typeof providerDetectionProfiles)[Exclude<ImportedFileSource, "hostlyx_excel" | "financial_statement">],
+        ]
       >) {
         const indexes = mapOptionalHeaderIndexes(row, profile.columns);
         const matchedColumns = countMatchedColumns(indexes);

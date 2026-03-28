@@ -54,6 +54,8 @@ export function LatestImportDangerCard({
     return null;
   }
 
+  const isFinancialStatement = latestImport.importedSource === "financial_statement";
+
   return (
     <>
       <div className="rounded-[28px] border border-amber-400/18 bg-[linear-gradient(180deg,rgba(244,198,105,0.10),rgba(15,24,38,0.88))] p-5 sm:p-6">
@@ -103,7 +105,9 @@ export function LatestImportDangerCard({
           <div className="workspace-soft-card rounded-[22px] px-4 py-4">
             <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--workspace-muted)]">Data created</p>
             <p className="mt-2 text-sm font-medium text-[var(--workspace-text)]">
-              {formatNumber(latestImport.bookingsCount)} bookings · {formatNumber(latestImport.expensesCount)} expenses
+              {isFinancialStatement
+                ? "1 financial statement"
+                : `${formatNumber(latestImport.bookingsCount)} bookings · ${formatNumber(latestImport.expensesCount)} expenses`}
             </p>
           </div>
         </div>
@@ -122,7 +126,10 @@ export function LatestImportDangerCard({
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
               <p>
-                This will remove <span className="font-semibold text-rose-900">{latestImport.fileName}</span> and delete the bookings and expenses created by that import batch.
+                This will remove <span className="font-semibold text-rose-900">{latestImport.fileName}</span> and delete{" "}
+                {isFinancialStatement
+                  ? "the financial statement saved from that import batch."
+                  : "the bookings and expenses created by that import batch."}
               </p>
             </div>
           </div>
@@ -137,7 +144,9 @@ export function LatestImportDangerCard({
               <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">{formatNumber(latestImport.bookingsCount)}</p>
             </div>
             <div className="workspace-soft-card rounded-2xl px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Expenses to remove</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                {isFinancialStatement ? "Statement rows" : "Expenses to remove"}
+              </p>
               <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">{formatNumber(latestImport.expensesCount)}</p>
             </div>
           </div>

@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Percent,
   ReceiptText,
+  Scale,
   TriangleAlert,
   TrendingUp,
   Wallet,
@@ -171,6 +172,19 @@ function formatPercent(value: number) {
 
 function formatWholePercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatSignedCurrency(value: number, currencyCode: CurrencyCode) {
+  const absolute = formatCurrency(Math.abs(value), false, currencyCode);
+  if (value > 0) {
+    return `+${absolute}`;
+  }
+
+  if (value < 0) {
+    return `-${absolute}`;
+  }
+
+  return absolute;
 }
 
 function getPrimaryHeroInsight(view: DashboardView) {
@@ -723,6 +737,73 @@ export function DashboardShell({
                       </div>
                     </article>
                   </div>
+
+                  {view.realityCheck ? (
+                    <article className="workspace-soft-card rounded-[26px] border-[var(--workspace-accent)]/12 bg-[linear-gradient(180deg,rgba(125,211,197,0.06)_0%,rgba(10,20,34,0.92)_100%)] p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--workspace-muted)]">
+                            Reality check
+                          </p>
+                          <p className="mt-3 text-lg font-semibold tracking-[-0.03em] text-[var(--workspace-text)]">
+                            Compare booking payout against the imported statement.
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                            {view.realityCheck.source === "airbnb" ? "Airbnb" : "Booking.com"} statement • {view.realityCheck.periodLabel}
+                          </p>
+                        </div>
+                        <div className="workspace-icon-chip rounded-[18px] p-3">
+                          <Scale className="h-4 w-4" />
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 md:grid-cols-3">
+                        <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
+                            Expected
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--workspace-text)]">
+                            {formatCurrency(view.realityCheck.expectedPayout, false, currencyCode)}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                            Booking payout in the selected view.
+                          </p>
+                        </div>
+                        <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
+                            Actual
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--workspace-text)]">
+                            {formatCurrency(view.realityCheck.actualPayout, false, currencyCode)}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                            Payout captured from the financial statement.
+                          </p>
+                        </div>
+                        <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
+                            Difference
+                          </p>
+                          <p
+                            className={`mt-2 text-2xl font-semibold tracking-[-0.04em] ${
+                              view.realityCheck.difference < 0
+                                ? "text-amber-100"
+                                : view.realityCheck.difference > 0
+                                  ? "text-emerald-100"
+                                  : "text-[var(--workspace-text)]"
+                            }`}
+                          >
+                            {formatSignedCurrency(view.realityCheck.difference, currencyCode)}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                            {view.realityCheck.mismatchRatio === null
+                              ? "No expected payout in view yet."
+                              : `${formatPercent(Math.abs(view.realityCheck.mismatchRatio))} mismatch against expected payout.`}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ) : null}
 
                   <div className="grid gap-4 border-t border-white/6 pt-4 md:grid-cols-2 xl:grid-cols-4">
                     <article className="workspace-soft-card rounded-[24px] p-5">

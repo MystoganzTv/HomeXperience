@@ -26,7 +26,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({
-      message: `Deleted ${result.deletedFileName} from ${result.deletedPropertyName}. Removed ${result.deletedBookingsCount} bookings and ${result.deletedExpensesCount} expenses that came from that import.`,
+      message: `Deleted ${result.deletedFileName} from ${result.deletedPropertyName}. Removed the data linked to that import batch.`,
     });
   } catch (error) {
     return NextResponse.json(

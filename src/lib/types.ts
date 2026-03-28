@@ -3,7 +3,8 @@ export type ImportedFileSource =
   | "airbnb"
   | "booking_com"
   | "generic_excel"
-  | "hostlyx_excel";
+  | "hostlyx_excel"
+  | "financial_statement";
 export type CurrencyCode = "USD" | "EUR" | "GBP";
 export type CountryCode = "US" | "ES" | "GB";
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "portfolio";
@@ -84,6 +85,26 @@ export type ImportSummary = {
   importedAt: string;
   bookingsCount: number;
   expensesCount: number;
+};
+
+export type FinancialDocumentSource = "airbnb" | "booking";
+
+export type FinancialDocumentRecord = {
+  id?: number;
+  importId?: number;
+  propertyName: string;
+  source: FinancialDocumentSource;
+  period: {
+    start: string;
+    end: string;
+    label: string;
+  };
+  totalPayout: number;
+  totalFees: number;
+  totalTaxes: number;
+  currency: string;
+  rawData: string;
+  importedAt?: string;
 };
 
 export type ImportValidationWarning = {
@@ -204,6 +225,17 @@ export type DashboardView = {
     guests: number;
     nights: number;
   }>;
+  realityCheck: null | {
+    source: FinancialDocumentSource;
+    periodLabel: string;
+    expectedPayout: number;
+    actualPayout: number;
+    difference: number;
+    mismatchRatio: number | null;
+    totalFees: number;
+    totalTaxes: number;
+    currency: string;
+  };
   metrics: {
     totalRevenue: number;
     totalPayout: number;

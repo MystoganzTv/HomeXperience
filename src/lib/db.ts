@@ -9,9 +9,11 @@ import type {
   CalendarClosureRecord,
   CountryCode,
   ExpenseRecord,
+  FinancialDocumentRecord,
   ImportedFileSource,
   ImportSource,
   ImportSummary,
+  FinancialDocumentSource,
   PropertyDefinition,
   PropertyUnit,
   SubscriptionPlan,
@@ -50,6 +52,10 @@ type StoredExpense = Required<ExpenseRecord> & {
 };
 
 type StoredCalendarClosure = Required<CalendarClosureRecord> & {
+  ownerEmail: string;
+};
+
+type StoredFinancialDocument = Required<FinancialDocumentRecord> & {
   ownerEmail: string;
 };
 
@@ -100,12 +106,14 @@ type MemoryStore = {
   nextBookingId: number;
   nextExpenseId: number;
   nextClosureId: number;
+  nextFinancialDocumentId: number;
   nextPropertyId: number;
   nextPropertyUnitId: number;
   imports: StoredImport[];
   bookings: StoredBooking[];
   expenses: StoredExpense[];
   closures: StoredCalendarClosure[];
+  financialDocuments: StoredFinancialDocument[];
   settings: StoredUserSettings[];
   authUsers: StoredAuthUser[];
   subscriptions: StoredSubscription[];
@@ -170,12 +178,14 @@ function getMemoryStore() {
       nextBookingId: 1,
       nextExpenseId: 1,
       nextClosureId: 1,
+      nextFinancialDocumentId: 1,
       nextPropertyId: 1,
       nextPropertyUnitId: 1,
       imports: [],
       bookings: [],
       expenses: [],
       closures: [],
+      financialDocuments: [],
       settings: [],
       authUsers: [],
       subscriptions: [],
@@ -190,6 +200,14 @@ function getMemoryStore() {
 
   if (!globalThis.__hostlyxMemoryStore.subscriptions) {
     globalThis.__hostlyxMemoryStore.subscriptions = [];
+  }
+
+  if (!globalThis.__hostlyxMemoryStore.financialDocuments) {
+    globalThis.__hostlyxMemoryStore.financialDocuments = [];
+  }
+
+  if (!globalThis.__hostlyxMemoryStore.nextFinancialDocumentId) {
+    globalThis.__hostlyxMemoryStore.nextFinancialDocumentId = 1;
   }
 
   return globalThis.__hostlyxMemoryStore;
@@ -281,6 +299,23 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
       nights INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS financial_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_email TEXT NOT NULL DEFAULT 'legacy',
+      import_id INTEGER NOT NULL DEFAULT 0,
+      property_name TEXT NOT NULL DEFAULT 'Default Property',
+      source TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      period_label TEXT NOT NULL,
+      total_payout REAL NOT NULL DEFAULT 0,
+      total_fees REAL NOT NULL DEFAULT 0,
+      total_taxes REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT '',
+      raw_data TEXT NOT NULL DEFAULT '{}',
+      imported_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS user_settings (
       owner_email TEXT PRIMARY KEY,
       business_name TEXT NOT NULL,
@@ -344,6 +379,8 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
     CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
     CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+    CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_import ON financial_documents(owner_email, import_id);
+    CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_period ON financial_documents(owner_email, period_start, period_end);
     CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_owner_email ON subscriptions(owner_email);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
@@ -491,6 +528,58 @@ function initializeSQLiteSchema(db: SQLiteDatabase) {
     db.exec("ALTER TABLE calendar_closures ADD COLUMN nights INTEGER NOT NULL DEFAULT 0;");
   }
 
+  if (!hasColumn(db, "financial_documents", "owner_email")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "import_id")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN import_id INTEGER NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "financial_documents", "property_name")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN property_name TEXT NOT NULL DEFAULT 'Default Property';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "source")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN source TEXT NOT NULL DEFAULT 'airbnb';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "period_start")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN period_start TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "period_end")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN period_end TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "period_label")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN period_label TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "total_payout")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN total_payout REAL NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "financial_documents", "total_fees")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN total_fees REAL NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "financial_documents", "total_taxes")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN total_taxes REAL NOT NULL DEFAULT 0;");
+  }
+
+  if (!hasColumn(db, "financial_documents", "currency")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN currency TEXT NOT NULL DEFAULT '';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "raw_data")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN raw_data TEXT NOT NULL DEFAULT '{}';");
+  }
+
+  if (!hasColumn(db, "financial_documents", "imported_at")) {
+    db.exec("ALTER TABLE financial_documents ADD COLUMN imported_at TEXT NOT NULL DEFAULT '';");
+  }
+
   if (!hasColumn(db, "user_settings", "primary_country_code")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN primary_country_code TEXT NOT NULL DEFAULT 'US';");
   }
@@ -612,6 +701,23 @@ async function initializePostgresSchema() {
           nights INTEGER NOT NULL DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS financial_documents (
+          id BIGSERIAL PRIMARY KEY,
+          owner_email TEXT NOT NULL,
+          import_id BIGINT NOT NULL DEFAULT 0,
+          property_name TEXT NOT NULL DEFAULT 'Default Property',
+          source TEXT NOT NULL,
+          period_start TEXT NOT NULL,
+          period_end TEXT NOT NULL,
+          period_label TEXT NOT NULL,
+          total_payout DOUBLE PRECISION NOT NULL DEFAULT 0,
+          total_fees DOUBLE PRECISION NOT NULL DEFAULT 0,
+          total_taxes DOUBLE PRECISION NOT NULL DEFAULT 0,
+          currency TEXT NOT NULL DEFAULT '',
+          raw_data TEXT NOT NULL DEFAULT '{}',
+          imported_at TIMESTAMPTZ NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS user_settings (
           owner_email TEXT PRIMARY KEY,
           business_name TEXT NOT NULL,
@@ -675,6 +781,8 @@ async function initializePostgresSchema() {
         CREATE INDEX IF NOT EXISTS idx_bookings_owner_channel ON bookings(owner_email, channel);
         CREATE INDEX IF NOT EXISTS idx_expenses_owner_date ON expenses(owner_email, date);
         CREATE INDEX IF NOT EXISTS idx_calendar_closures_owner_date ON calendar_closures(owner_email, date);
+        CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_import ON financial_documents(owner_email, import_id);
+        CREATE INDEX IF NOT EXISTS idx_financial_documents_owner_period ON financial_documents(owner_email, period_start, period_end);
         CREATE INDEX IF NOT EXISTS idx_auth_users_owner_email ON auth_users(owner_email);
         CREATE INDEX IF NOT EXISTS idx_subscriptions_owner_email ON subscriptions(owner_email);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_owner_name ON properties(owner_email, name);
@@ -808,6 +916,58 @@ async function initializePostgresSchema() {
       await pool.query(`
         ALTER TABLE calendar_closures
         ADD COLUMN IF NOT EXISTS nights INTEGER NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'legacy'
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS import_id BIGINT NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'Default Property'
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'airbnb'
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS period_start TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS period_end TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS period_label TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS total_payout DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS total_fees DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS total_taxes DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT ''
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS raw_data TEXT NOT NULL DEFAULT '{}'
+      `);
+      await pool.query(`
+        ALTER TABLE financial_documents
+        ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       `);
     })();
   }
@@ -990,6 +1150,30 @@ function mapCalendarClosureRecord(row: Record<string, unknown>): CalendarClosure
   };
 }
 
+function mapFinancialDocumentRecord(row: Record<string, unknown>): FinancialDocumentRecord {
+  return {
+    id: Number(getRowValue(row, "id")),
+    importId: Number(getRowValue(row, "importId", "importid")),
+    propertyName:
+      String(getRowValue(row, "propertyName", "propertyname")) || "Default Property",
+    source: String(getRowValue(row, "source")) as FinancialDocumentSource,
+    period: {
+      start: String(getRowValue(row, "periodStart", "periodstart")),
+      end: String(getRowValue(row, "periodEnd", "periodend")),
+      label: String(getRowValue(row, "periodLabel", "periodlabel")),
+    },
+    totalPayout: Number(getRowValue(row, "totalPayout", "totalpayout") ?? 0),
+    totalFees: Number(getRowValue(row, "totalFees", "totalfees") ?? 0),
+    totalTaxes: Number(getRowValue(row, "totalTaxes", "totaltaxes") ?? 0),
+    currency: String(getRowValue(row, "currency") ?? ""),
+    rawData: String(getRowValue(row, "rawData", "rawdata") ?? "{}"),
+    importedAt: normalizeTimestampValue(
+      getRowValue(row, "importedAt", "importedat"),
+      new Date().toISOString(),
+    ),
+  };
+}
+
 function getRowValue(row: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
     if (key in row) {
@@ -1083,6 +1267,26 @@ function cloneCalendarClosureRecord(closure: StoredCalendarClosure): CalendarClo
     statusLabel: closure.statusLabel,
     guestCount: closure.guestCount,
     nights: closure.nights,
+  };
+}
+
+function cloneFinancialDocumentRecord(document: StoredFinancialDocument): FinancialDocumentRecord {
+  return {
+    id: document.id,
+    importId: document.importId,
+    propertyName: document.propertyName,
+    source: document.source,
+    period: {
+      start: document.period.start,
+      end: document.period.end,
+      label: document.period.label,
+    },
+    totalPayout: document.totalPayout,
+    totalFees: document.totalFees,
+    totalTaxes: document.totalTaxes,
+    currency: document.currency,
+    rawData: document.rawData,
+    importedAt: document.importedAt,
   };
 }
 
@@ -1480,6 +1684,12 @@ type DeleteImportResult = {
   deletedPropertyName: string;
   deletedBookingsCount: number;
   deletedExpensesCount: number;
+};
+
+type FinancialStatementImportResult = {
+  importId: number;
+  importedAt: string;
+  financialDocumentsCount: number;
 };
 
 export async function appendImportData({
@@ -2334,6 +2544,10 @@ export async function deleteImportBatch({
         [normalizedEmail, importId],
       );
       await client.query(
+        "DELETE FROM financial_documents WHERE owner_email = $1 AND import_id = $2",
+        [normalizedEmail, importId],
+      );
+      await client.query(
         "DELETE FROM calendar_closures WHERE owner_email = $1 AND import_id = $2",
         [normalizedEmail, importId],
       );
@@ -2383,6 +2597,9 @@ export async function deleteImportBatch({
     store.expenses = store.expenses.filter(
       (expense) => !(expense.ownerEmail === normalizedEmail && expense.importId === importId),
     );
+    store.financialDocuments = store.financialDocuments.filter(
+      (document) => !(document.ownerEmail === normalizedEmail && document.importId === importId),
+    );
     store.closures = store.closures.filter(
       (closure) => !(closure.ownerEmail === normalizedEmail && closure.importId === importId),
     );
@@ -2430,6 +2647,10 @@ export async function deleteImportBatch({
       db
         .prepare("DELETE FROM expenses WHERE owner_email = ? AND import_id = ?")
         .run(normalizedEmail, importId).changes ?? 0;
+    db.prepare("DELETE FROM financial_documents WHERE owner_email = ? AND import_id = ?").run(
+      normalizedEmail,
+      importId,
+    );
     db.prepare("DELETE FROM calendar_closures WHERE owner_email = ? AND import_id = ?").run(
       normalizedEmail,
       importId,
@@ -2450,6 +2671,247 @@ export async function deleteImportBatch({
     deletedBookingsCount,
     deletedExpensesCount,
   };
+}
+
+export async function appendFinancialStatementImport({
+  ownerEmail,
+  fileName,
+  workbookHash,
+  propertyName,
+  source,
+  document,
+}: {
+  ownerEmail: string;
+  fileName: string;
+  workbookHash: string;
+  propertyName: string;
+  source: ImportSource;
+  document: FinancialDocumentRecord;
+}): Promise<FinancialStatementImportResult> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+  const importedAt = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const importResult = await client.query(
+        `
+          INSERT INTO imports (owner_email, file_name, workbook_hash, property_name, source, imported_source, imported_at, bookings_count, expenses_count)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0)
+          RETURNING id
+        `,
+        [
+          normalizedEmail,
+          fileName,
+          workbookHash,
+          propertyName,
+          source,
+          "financial_statement",
+          importedAt,
+        ],
+      );
+
+      const importId = Number(importResult.rows[0]?.id ?? 0);
+
+      await client.query(
+        `
+          INSERT INTO financial_documents (
+            owner_email, import_id, property_name, source, period_start, period_end, period_label,
+            total_payout, total_fees, total_taxes, currency, raw_data, imported_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `,
+        [
+          normalizedEmail,
+          importId,
+          propertyName,
+          document.source,
+          document.period.start,
+          document.period.end,
+          document.period.label,
+          document.totalPayout,
+          document.totalFees,
+          document.totalTaxes,
+          document.currency,
+          document.rawData,
+          importedAt,
+        ],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        importId,
+        importedAt,
+        financialDocumentsCount: 1,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    const importId = store.nextImportId++;
+
+    store.imports.push({
+      id: importId,
+      ownerEmail: normalizedEmail,
+      fileName,
+      workbookHash,
+      propertyName,
+      source,
+      importedSource: "financial_statement",
+      importedAt,
+      bookingsCount: 0,
+      expensesCount: 0,
+    });
+
+    store.financialDocuments.push({
+      id: store.nextFinancialDocumentId++,
+      importId,
+      ownerEmail: normalizedEmail,
+      propertyName,
+      source: document.source,
+      period: { ...document.period },
+      totalPayout: document.totalPayout,
+      totalFees: document.totalFees,
+      totalTaxes: document.totalTaxes,
+      currency: document.currency,
+      rawData: document.rawData,
+      importedAt,
+    });
+
+    return {
+      importId,
+      importedAt,
+      financialDocumentsCount: 1,
+    };
+  }
+
+  const db = getSQLiteDatabase();
+  const result = db
+    .prepare(
+      `
+        INSERT INTO imports (owner_email, file_name, workbook_hash, property_name, source, imported_source, imported_at, bookings_count, expenses_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+      `,
+    )
+    .run(
+      normalizedEmail,
+      fileName,
+      workbookHash,
+      propertyName,
+      source,
+      "financial_statement",
+      importedAt,
+    );
+  const importId = Number(result.lastInsertRowid ?? 0);
+
+  db.prepare(
+    `
+      INSERT INTO financial_documents (
+        owner_email, import_id, property_name, source, period_start, period_end, period_label,
+        total_payout, total_fees, total_taxes, currency, raw_data, imported_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  ).run(
+    normalizedEmail,
+    importId,
+    propertyName,
+    document.source,
+    document.period.start,
+    document.period.end,
+    document.period.label,
+    document.totalPayout,
+    document.totalFees,
+    document.totalTaxes,
+    document.currency,
+    document.rawData,
+    importedAt,
+  );
+
+  return {
+    importId,
+    importedAt,
+    financialDocumentsCount: 1,
+  };
+}
+
+export async function getFinancialDocuments(ownerEmail: string): Promise<FinancialDocumentRecord[]> {
+  await ensureDatabase();
+  const normalizedEmail = normalizeOwnerEmail(ownerEmail);
+
+  if (isPostgresConfigured()) {
+    const pool = getPostgresPool();
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          property_name AS propertyName,
+          source,
+          period_start AS periodStart,
+          period_end AS periodEnd,
+          period_label AS periodLabel,
+          total_payout AS totalPayout,
+          total_fees AS totalFees,
+          total_taxes AS totalTaxes,
+          currency,
+          raw_data AS rawData,
+          imported_at AS importedAt
+        FROM financial_documents
+        WHERE owner_email = $1
+        ORDER BY imported_at DESC
+      `,
+      [normalizedEmail],
+    );
+
+    return result.rows.map((row) => mapFinancialDocumentRecord(row as Record<string, unknown>));
+  }
+
+  if (shouldUseMemoryFallback()) {
+    const store = getMemoryStore();
+    return store.financialDocuments
+      .filter((document) => document.ownerEmail === normalizedEmail)
+      .sort((left, right) => right.importedAt.localeCompare(left.importedAt))
+      .map(cloneFinancialDocumentRecord);
+  }
+
+  const db = getSQLiteDatabase();
+  return db
+    .prepare(
+      `
+        SELECT
+          id,
+          import_id AS importId,
+          property_name AS propertyName,
+          source,
+          period_start AS periodStart,
+          period_end AS periodEnd,
+          period_label AS periodLabel,
+          total_payout AS totalPayout,
+          total_fees AS totalFees,
+          total_taxes AS totalTaxes,
+          currency,
+          raw_data AS rawData,
+          imported_at AS importedAt
+        FROM financial_documents
+        WHERE owner_email = ?
+        ORDER BY imported_at DESC
+      `,
+    )
+    .all(normalizedEmail)
+    .map((row) => mapFinancialDocumentRecord(row as Record<string, unknown>));
 }
 
 export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> {
@@ -3182,6 +3644,10 @@ export async function deletePropertyDefinition({
         [normalizedEmail, propertyName],
       );
       await pool.query(
+        "DELETE FROM financial_documents WHERE owner_email = $1 AND property_name = $2",
+        [normalizedEmail, propertyName],
+      );
+      await pool.query(
         "DELETE FROM imports WHERE owner_email = $1 AND property_name = $2",
         [normalizedEmail, propertyName],
         );
@@ -3248,6 +3714,9 @@ export async function deletePropertyDefinition({
       );
       store.closures = store.closures.filter(
         (closure) => !(closure.ownerEmail === normalizedEmail && closure.propertyName === property.name),
+      );
+      store.financialDocuments = store.financialDocuments.filter(
+        (document) => !(document.ownerEmail === normalizedEmail && document.propertyName === property.name),
       );
       store.imports = store.imports.filter(
         (entry) => !(entry.ownerEmail === normalizedEmail && entry.propertyName === property.name),
@@ -3317,6 +3786,10 @@ export async function deletePropertyDefinition({
         property.name,
       );
       db.prepare("DELETE FROM calendar_closures WHERE owner_email = ? AND property_name = ?").run(
+        normalizedEmail,
+        property.name,
+      );
+      db.prepare("DELETE FROM financial_documents WHERE owner_email = ? AND property_name = ?").run(
         normalizedEmail,
         property.name,
       );
@@ -5054,6 +5527,7 @@ export async function deleteManagedUser(ownerEmail: string) {
       await client.query("DELETE FROM bookings WHERE owner_email = $1", [normalizedEmail]);
       await client.query("DELETE FROM expenses WHERE owner_email = $1", [normalizedEmail]);
       await client.query("DELETE FROM calendar_closures WHERE owner_email = $1", [normalizedEmail]);
+      await client.query("DELETE FROM financial_documents WHERE owner_email = $1", [normalizedEmail]);
       await client.query("DELETE FROM imports WHERE owner_email = $1", [normalizedEmail]);
       await client.query("DELETE FROM property_units WHERE owner_email = $1", [normalizedEmail]);
       await client.query("DELETE FROM properties WHERE owner_email = $1", [normalizedEmail]);
@@ -5076,6 +5550,7 @@ export async function deleteManagedUser(ownerEmail: string) {
     store.bookings = store.bookings.filter((entry) => entry.ownerEmail !== normalizedEmail);
     store.expenses = store.expenses.filter((entry) => entry.ownerEmail !== normalizedEmail);
     store.closures = store.closures.filter((entry) => entry.ownerEmail !== normalizedEmail);
+    store.financialDocuments = store.financialDocuments.filter((entry) => entry.ownerEmail !== normalizedEmail);
     store.imports = store.imports.filter((entry) => entry.ownerEmail !== normalizedEmail);
     store.propertyUnits = store.propertyUnits.filter((entry) => entry.ownerEmail !== normalizedEmail);
     store.properties = store.properties.filter((entry) => entry.ownerEmail !== normalizedEmail);
@@ -5089,6 +5564,7 @@ export async function deleteManagedUser(ownerEmail: string) {
   db.prepare("DELETE FROM bookings WHERE owner_email = ?").run(normalizedEmail);
   db.prepare("DELETE FROM expenses WHERE owner_email = ?").run(normalizedEmail);
   db.prepare("DELETE FROM calendar_closures WHERE owner_email = ?").run(normalizedEmail);
+  db.prepare("DELETE FROM financial_documents WHERE owner_email = ?").run(normalizedEmail);
   db.prepare("DELETE FROM imports WHERE owner_email = ?").run(normalizedEmail);
   db.prepare("DELETE FROM property_units WHERE owner_email = ?").run(normalizedEmail);
   db.prepare("DELETE FROM properties WHERE owner_email = ?").run(normalizedEmail);

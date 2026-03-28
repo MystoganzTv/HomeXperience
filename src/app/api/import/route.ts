@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
-import { appendImportData, getBookings, getPropertyDefinitions } from "@/lib/db";
+import {
+  appendFinancialStatementImport,
+  appendImportData,
+  getBookings,
+  getPropertyDefinitions,
+} from "@/lib/db";
 import { buildImportPreview, mapPreviewToHostlyxRecords } from "@/lib/import/importPipeline";
 import type { ImportManualMapping } from "@/lib/import/types";
 
@@ -69,6 +74,7 @@ export async function POST(request: Request) {
           skippedRows: preview.skippedRows,
           expensesDetected: preview.expensesDetected,
           importableRows: preview.importableRows,
+          financialStatement: preview.financialStatement,
           previewRows: preview.previewRows,
           reviewRows: preview.reviewRows,
           warnings: preview.warnings,
@@ -83,16 +89,13 @@ export async function POST(request: Request) {
         {
           error: preview.requiresManualMapping
             ? "We couldn’t fully recognize your file. Map your columns in a few seconds to continue."
+            : preview.source === "financial_statement"
+            ? preview.blockMessage ?? "This financial statement still needs one more review before Hostlyx can import it."
             : "This file needs attention before Hostlyx can import it.",
         },
         { status: 400 },
       );
     }
-
-    const duplicateStrategy =
-      String(formData.get("duplicateStrategy") ?? "skip").trim().toLowerCase() === "import"
-        ? "import"
-        : "skip";
 
     const propertyDefinitions = await getPropertyDefinitions(ownerEmail);
 
@@ -121,6 +124,44 @@ export async function POST(request: Request) {
     const workbookHash = createHash("sha256")
       .update(Buffer.from(buffer))
       .digest("hex");
+
+    if (preview.source === "financial_statement" && preview.financialStatement) {
+      const result = await appendFinancialStatementImport({
+        ownerEmail,
+        fileName: fileValue.name,
+        workbookHash,
+        propertyName: targetPropertyName,
+        source: "upload",
+        document: {
+          propertyName: targetPropertyName,
+          source: preview.financialStatement.source,
+          period: preview.financialStatement.period,
+          totalPayout: preview.financialStatement.totalPayout,
+          totalFees: preview.financialStatement.totalFees,
+          totalTaxes: preview.financialStatement.totalTaxes,
+          currency: preview.financialStatement.currency,
+          rawData: preview.financialStatement.rawData,
+        },
+      });
+
+      return NextResponse.json({
+        message: `Imported 1 financial statement into ${targetPropertyName}.`,
+        committed: {
+          source: preview.source,
+          sourceLabel: preview.sourceLabel,
+          bookingsImported: 0,
+          expensesImported: 0,
+          skippedRows: 0,
+          financialDocumentsImported: result.financialDocumentsCount,
+        },
+      });
+    }
+
+    const duplicateStrategy =
+      String(formData.get("duplicateStrategy") ?? "skip").trim().toLowerCase() === "import"
+        ? "import"
+        : "skip";
+
     const mapped = mapPreviewToHostlyxRecords(preview, targetPropertyName, {
       duplicateStrategy,
     });

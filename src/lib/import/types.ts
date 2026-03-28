@@ -2,7 +2,7 @@ export type ImportDetectedSource =
   | "airbnb"
   | "booking"
   | "generic"
-  | "airbnb_invoice"
+  | "financial_statement"
   | "unknown";
 
 export type ImportCellValue = string | number | boolean | Date | null | undefined;
@@ -149,6 +149,19 @@ export type ImportPreview = {
   importableRows: number;
   bookings: ImportBookingCandidate[];
   expenses: ImportExpenseCandidate[];
+  financialStatement: null | {
+    source: "airbnb" | "booking";
+    period: {
+      start: string;
+      end: string;
+      label: string;
+    };
+    totalPayout: number;
+    totalFees: number;
+    totalTaxes: number;
+    currency: string;
+    rawData: string;
+  };
   previewRows: ImportPreviewRow[];
   reviewRows: Record<ImportReviewSection, ImportReviewRow[]>;
   warnings: ImportValidationWarning[];
@@ -185,8 +198,8 @@ export function getDetectedSourceLabel(source: ImportDetectedSource) {
       return "Booking.com";
     case "generic":
       return "Generic Excel";
-    case "airbnb_invoice":
-      return "Airbnb invoice/tax file";
+    case "financial_statement":
+      return "Financial statement";
     default:
       return "Unknown format";
   }

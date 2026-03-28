@@ -9,6 +9,7 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
+  CircleDollarSign,
   FileSpreadsheet,
   LoaderCircle,
   ShieldCheck,
@@ -102,7 +103,7 @@ type ReviewRow = {
 };
 
 type ImportPreviewPayload = {
-  source: "airbnb" | "booking" | "generic" | "airbnb_invoice" | "unknown";
+  source: "airbnb" | "booking" | "generic" | "financial_statement" | "unknown";
   sourceLabel: string;
   fileName: string;
   requiresManualMapping: boolean;
@@ -117,6 +118,19 @@ type ImportPreviewPayload = {
   skippedRows: number;
   expensesDetected: number;
   importableRows: number;
+  financialStatement: null | {
+    source: "airbnb" | "booking";
+    period: {
+      start: string;
+      end: string;
+      label: string;
+    };
+    totalPayout: number;
+    totalFees: number;
+    totalTaxes: number;
+    currency: string;
+    rawData: string;
+  };
   previewRows: PreviewRow[];
   reviewRows: Record<ReviewSection, ReviewRow[]>;
   warnings: PreviewWarning[];
@@ -137,6 +151,7 @@ type ImportCommittedPayload = {
   bookingsImported: number;
   expensesImported: number;
   skippedRows: number;
+  financialDocumentsImported?: number;
 };
 
 type UploadToast = {
@@ -192,12 +207,12 @@ function getSourcePresentation(source: ImportPreviewPayload["source"]) {
         badge: "Excel",
         description: "We detected your workbook structure and prepared it for review.",
       };
-    case "airbnb_invoice":
+    case "financial_statement":
       return {
-        icon: AlertTriangle,
-        badge: "Airbnb invoice/tax file",
+        icon: CircleDollarSign,
+        badge: "Financial statement",
         description:
-          "This looks like an Airbnb invoice or VAT export, not a reservations export.",
+          "This looks like a financial statement, not individual bookings.",
       };
     default:
       return {
@@ -263,6 +278,10 @@ export function UploadPanel({
       return "Import data";
     }
 
+    if (preview.source === "financial_statement") {
+      return "Import as financial statement";
+    }
+
     if (preview.blocksImport) {
       return "Use a reservations export";
     }
@@ -280,6 +299,10 @@ export function UploadPanel({
     }
 
     if (preview.blocksImport) {
+      return [];
+    }
+
+    if (preview.source === "financial_statement") {
       return [];
     }
 
@@ -677,11 +700,19 @@ export function UploadPanel({
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {[
-                ["Bookings imported", committed.bookingsImported, "text-[var(--workspace-text)]"],
-                ["Expenses imported", committed.expensesImported, "text-[var(--workspace-text)]"],
-                ["Rows skipped", committed.skippedRows, "text-[var(--workspace-muted)]"],
-              ].map(([label, value, tone]) => (
+              {(
+                committed.financialDocumentsImported
+                  ? [
+                      ["Statements imported", committed.financialDocumentsImported, "text-[var(--workspace-text)]"],
+                      ["Bookings imported", committed.bookingsImported, "text-[var(--workspace-text)]"],
+                      ["Rows skipped", committed.skippedRows, "text-[var(--workspace-muted)]"],
+                    ]
+                  : [
+                      ["Bookings imported", committed.bookingsImported, "text-[var(--workspace-text)]"],
+                      ["Expenses imported", committed.expensesImported, "text-[var(--workspace-text)]"],
+                      ["Rows skipped", committed.skippedRows, "text-[var(--workspace-muted)]"],
+                    ]
+              ).map(([label, value, tone]) => (
                 <div
                   key={String(label)}
                   className="rounded-[24px] border border-[var(--workspace-border)] bg-[rgba(255,255,255,0.03)] px-5 py-5"
@@ -948,6 +979,8 @@ export function UploadPanel({
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--workspace-muted)]">
                         {preview.blocksImport
                           ? preview.blockMessage
+                          : preview.source === "financial_statement"
+                          ? "This looks like a financial statement, not individual bookings."
                           : preview.requiresManualMapping
                           ? preview.manualMapping?.message
                           : getSourcePresentation(preview.source).description}
@@ -955,7 +988,15 @@ export function UploadPanel({
                       {preview.blocksImport ? (
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <span className="rounded-full border border-rose-400/20 bg-rose-300/[0.08] px-3 py-1.5 text-xs font-medium text-rose-100">
-                            Use a reservations or earnings export instead
+                            {preview.source === "financial_statement"
+                              ? "We still need a readable payout total"
+                              : "Use a reservations or earnings export instead"}
+                          </span>
+                        </div>
+                      ) : preview.source === "financial_statement" ? (
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <span className="rounded-full border border-[var(--workspace-accent)]/24 bg-[rgba(125,211,197,0.12)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-accent)]">
+                            Import as financial statement
                           </span>
                         </div>
                       ) : needsFocusedMapping ? (
@@ -978,6 +1019,8 @@ export function UploadPanel({
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                       preview.blocksImport
                         ? "border-rose-400/24 bg-rose-400/10 text-rose-100"
+                        : preview.source === "financial_statement"
+                        ? "border-[var(--workspace-accent)]/24 bg-[rgba(125,211,197,0.12)] text-[var(--workspace-accent)]"
                         : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
                         ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-100"
                         : "border-amber-400/24 bg-amber-400/10 text-amber-100"
@@ -985,6 +1028,8 @@ export function UploadPanel({
                   >
                     {preview.blocksImport
                       ? "Wrong file type"
+                      : preview.source === "financial_statement"
+                      ? "Statement ready"
                       : preview.requiresManualMapping
                       ? "Manual mapping"
                       : preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
@@ -997,10 +1042,14 @@ export function UploadPanel({
               {preview.blocksImport ? (
                 <div className="rounded-[28px] border border-rose-400/18 bg-rose-300/[0.07] p-5 sm:p-6">
                   <p className="text-sm font-medium text-rose-50/95">
-                    This file is useful for invoices and VAT records, but it is not the right source for bookings.
+                    {preview.source === "financial_statement"
+                      ? "Hostlyx recognized a financial statement, but we still need a readable payout total before it can be imported."
+                      : "This file is useful for invoices and VAT records, but it is not the right source for bookings."}
                   </p>
                   <p className="mt-2 text-sm leading-6 text-rose-50/75">
-                    Export your Airbnb reservations or earnings file instead, then upload it here to populate bookings, payout, and stay dates.
+                    {preview.source === "financial_statement"
+                      ? "Try a cleaner payout or statement export, or one that includes the actual amount paid out, then upload it again."
+                      : "Export your Airbnb reservations or earnings file instead, then upload it here to populate bookings, payout, and stay dates."}
                   </p>
                 </div>
               ) : null}
@@ -1113,19 +1162,27 @@ export function UploadPanel({
 
               {!needsFocusedMapping && !preview.blocksImport ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ["Bookings detected", preview.importableRows, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
-                    ["Expenses detected", preview.expensesDetected, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
-                    [
-                      preview.errorRows > 0 ? "Errors" : "Warnings",
-                      preview.errorRows > 0 ? preview.errorRows : preview.warningRows,
-                      preview.errorRows > 0 ? "text-rose-100" : "text-amber-100",
-                      preview.errorRows > 0
-                        ? "border-rose-400/20 bg-rose-300/[0.08]"
-                        : "border-amber-400/20 bg-amber-300/[0.08]",
-                    ],
-                    ["Duplicates", preview.duplicateRows, "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
-                  ].map(([label, value, tone, surface]) => (
+                  {(preview.financialStatement
+                    ? [
+                        ["Statement source", preview.financialStatement.source === "airbnb" ? "Airbnb" : "Booking.com", "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["Payout detected", formatCurrency(preview.financialStatement.totalPayout), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["Fees detected", formatCurrency(preview.financialStatement.totalFees), "text-amber-100", "border-amber-400/20 bg-amber-300/[0.08]"],
+                        ["Taxes detected", formatCurrency(preview.financialStatement.totalTaxes), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                      ]
+                    : [
+                        ["Bookings detected", String(preview.importableRows), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        ["Expenses detected", String(preview.expensesDetected), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                        [
+                          preview.errorRows > 0 ? "Errors" : "Warnings",
+                          String(preview.errorRows > 0 ? preview.errorRows : preview.warningRows),
+                          preview.errorRows > 0 ? "text-rose-100" : "text-amber-100",
+                          preview.errorRows > 0
+                            ? "border-rose-400/20 bg-rose-300/[0.08]"
+                            : "border-amber-400/20 bg-amber-300/[0.08]",
+                        ],
+                        ["Duplicates", String(preview.duplicateRows), "text-[var(--workspace-text)]", "border-[var(--workspace-border)] bg-[var(--workspace-panel)]"],
+                      ]
+                  ).map(([label, value, tone, surface]) => (
                     <div
                       key={String(label)}
                       className={`rounded-[22px] border px-4 py-5 ${surface}`}
@@ -1138,6 +1195,11 @@ export function UploadPanel({
                       </p>
                       {label === "Errors" && preview.errorRows > 0 ? (
                         <p className="mt-2 text-xs leading-5 text-rose-100/75">These rows will be skipped unless you fix the source file.</p>
+                      ) : null}
+                      {label === "Statement source" && preview.financialStatement ? (
+                        <p className="mt-2 text-xs leading-5 text-[var(--workspace-muted)]">
+                          {preview.financialStatement.period.label}
+                        </p>
                       ) : null}
                     </div>
                   ))}
@@ -1239,13 +1301,42 @@ export function UploadPanel({
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
                       Preview
                     </p>
-                    <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">First normalized rows</p>
+                    <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                      {preview.financialStatement ? "Statement summary" : "First normalized rows"}
+                    </p>
                     <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
-                      A quick look at the first rows Hostlyx is ready to save.
+                      {preview.financialStatement
+                        ? "A quick read of the payout totals Hostlyx will use for reconciliation."
+                        : "A quick look at the first rows Hostlyx is ready to save."}
                     </p>
                   </div>
 
-                  {preview.previewRows.length > 0 ? (
+                  {preview.financialStatement ? (
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                          Period
+                        </p>
+                        <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                          {preview.financialStatement.period.label}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                          Imported as a financial statement instead of individual bookings.
+                        </p>
+                      </div>
+                      <div className="rounded-[20px] border border-[var(--workspace-border)] bg-white/[0.02] px-4 py-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-muted)]">
+                          Reality check preview
+                        </p>
+                        <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
+                          Expected payout vs actual payout
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
+                          Hostlyx will compare booking payout against this statement after import.
+                        </p>
+                      </div>
+                    </div>
+                  ) : preview.previewRows.length > 0 ? (
                     <div className="mt-5 overflow-x-auto">
                       <table className="min-w-full text-left text-sm">
                         <thead className="text-[11px] uppercase tracking-[0.16em] text-[var(--workspace-muted)]">
@@ -1282,7 +1373,10 @@ export function UploadPanel({
                 <div className="space-y-4">
                   <details
                     ref={reviewRef}
-                    open={preview.warningRows + preview.duplicateRows + preview.errorRows > 0}
+                    open={
+                      !preview.financialStatement &&
+                      preview.warningRows + preview.duplicateRows + preview.errorRows > 0
+                    }
                     className="rounded-[24px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5"
                   >
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
@@ -1291,17 +1385,23 @@ export function UploadPanel({
                           Review
                         </p>
                         <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
-                          Review potential issues
+                          {preview.financialStatement ? "What will happen next" : "Review potential issues"}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-[var(--workspace-muted)]">
-                          Errors need a quick fix in the source file. Valid rows can still be imported right away.
+                          {preview.financialStatement
+                            ? "This import will stay separate from bookings and feed the reconciliation card in your dashboard."
+                            : "Errors need a quick fix in the source file. Valid rows can still be imported right away."}
                         </p>
                       </div>
                       <ChevronDown className="h-5 w-5 text-[var(--workspace-muted)]" />
                     </summary>
 
                     <div className="mt-5 space-y-3">
-                      {reviewItems.length > 0 ? (
+                      {preview.financialStatement ? (
+                        <div className="rounded-[18px] border border-[var(--workspace-accent)]/18 bg-[rgba(125,211,197,0.08)] px-4 py-4 text-sm text-[var(--workspace-text)]">
+                          Hostlyx will save this as a financial statement and use it to compare booking payout against what Airbnb actually paid out.
+                        </div>
+                      ) : reviewItems.length > 0 ? (
                         reviewItems.map((row) => (
                           <div
                             key={row.id}
@@ -1340,11 +1440,15 @@ export function UploadPanel({
                           Ready to continue
                         </p>
                         <p className="mt-2 text-lg font-medium text-[var(--workspace-text)]">
-                          {actionableRows} clean row{actionableRows === 1 ? "" : "s"} ready to import
+                          {preview.financialStatement
+                            ? "1 financial statement ready to import"
+                            : `${actionableRows} clean row${actionableRows === 1 ? "" : "s"} ready to import`}
                         </p>
                       </div>
                       <p className="text-sm text-[var(--workspace-muted)]">
-                        {preview.errorRows > 0
+                        {preview.financialStatement
+                          ? "Nothing will be saved until you confirm this financial statement import."
+                          : preview.errorRows > 0
                           ? `${preview.errorRows} error row${preview.errorRows === 1 ? "" : "s"} will be skipped automatically.`
                           : preview.skippedRows > 0
                             ? `${preview.skippedRows} row${preview.skippedRows === 1 ? "" : "s"} will be skipped.`

@@ -27,6 +27,7 @@ import type {
   DashboardFilters,
   DashboardView,
   ExpenseRecord,
+  FinancialDocumentRecord,
   PropertyDefinition,
 } from "./types";
 
@@ -200,6 +201,13 @@ function clampRatio(value: number) {
   return Math.min(value, 1);
 }
 
+function rangesOverlap(
+  left: { start: Date; end: Date },
+  right: { start: Date; end: Date },
+) {
+  return left.start <= right.end && right.start <= left.end;
+}
+
 export function getDashboardFilters(
   searchParams: SearchParams,
   bookings: BookingRecord[],
@@ -344,6 +352,7 @@ export function filterExpensesForFilters({
 export function buildDashboardView({
   bookings,
   expenses,
+  financialDocuments = [],
   filters,
   properties,
   fallbackCountryCode,
@@ -352,6 +361,7 @@ export function buildDashboardView({
 }: {
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
+  financialDocuments?: FinancialDocumentRecord[];
   filters: DashboardFilters;
   properties: PropertyDefinition[];
   fallbackCountryCode: CountryCode;
@@ -531,6 +541,56 @@ export function buildDashboardView({
   const expensesByCategory: CategoryPoint[] = Object.entries(expenseCategoryTotals)
     .map(([label, value]) => ({ label, value }))
     .sort((left, right) => right.value - left.value);
+
+  const overlappingFinancialDocuments = financialDocuments.filter((document) => {
+    if (!document.period.start || !document.period.end) {
+      return false;
+    }
+
+    const start = parseISO(document.period.start);
+    const end = parseISO(document.period.end);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return false;
+    }
+
+    return rangesOverlap(activeRange, { start, end });
+  });
+
+  const actualStatementPayout = overlappingFinancialDocuments.reduce(
+    (sum, document) => sum + document.totalPayout,
+    0,
+  );
+  const actualStatementFees = overlappingFinancialDocuments.reduce(
+    (sum, document) => sum + document.totalFees,
+    0,
+  );
+  const actualStatementTaxes = overlappingFinancialDocuments.reduce(
+    (sum, document) => sum + document.totalTaxes,
+    0,
+  );
+  const latestStatement = overlappingFinancialDocuments[0] ?? null;
+  const realityCheck =
+    latestStatement && actualStatementPayout > 0
+      ? {
+          source: latestStatement.source,
+          periodLabel:
+            overlappingFinancialDocuments.length > 1
+              ? `${overlappingFinancialDocuments.length} statements in view`
+              : latestStatement.period.label,
+          expectedPayout: totals.totalPayout,
+          actualPayout: actualStatementPayout,
+          difference: actualStatementPayout - totals.totalPayout,
+          mismatchRatio:
+            totals.totalPayout !== 0
+              ? (actualStatementPayout - totals.totalPayout) / Math.abs(totals.totalPayout)
+              : null,
+          totalFees: actualStatementFees,
+          totalTaxes: actualStatementTaxes,
+          currency: latestStatement.currency || displayCurrencyCode,
+        }
+      : null;
+
   return {
     availableYears,
     availableChannels,
@@ -540,6 +600,7 @@ export function buildDashboardView({
     displayCurrencyCode,
     mixedCurrencyMode: filters.countryCode === "all" && availableCountries.length > 1,
     marketBreakdown,
+    realityCheck,
     metrics: {
       totalRevenue: totals.totalRevenue,
       totalPayout: totals.totalPayout,

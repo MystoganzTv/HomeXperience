@@ -4,6 +4,7 @@ import { buildDashboardView, getDashboardFilters } from "@/lib/dashboard";
 import {
   getBookings,
   getExpenses,
+  getFinancialDocuments,
   getLatestImport,
   getSubscriptionState,
   getUserSettings,
@@ -89,9 +90,10 @@ export default async function DashboardPage({
     );
   }
 
-  const [bookings, expenses] = await Promise.all([
+  const [bookings, expenses, financialDocuments] = await Promise.all([
     getBookings(ownerEmail),
     getExpenses(ownerEmail),
+    getFinancialDocuments(ownerEmail),
   ]);
   const resolvedSearchParams = await searchParams;
   const filters = getDashboardFilters(
@@ -104,6 +106,7 @@ export default async function DashboardPage({
   const view = buildDashboardView({
     bookings,
     expenses,
+    financialDocuments,
     filters,
     properties,
     fallbackCountryCode: userSettings.primaryCountryCode,

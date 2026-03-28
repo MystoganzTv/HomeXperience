@@ -95,8 +95,16 @@ export function ImportsManager({
                 </td>
                 <td className="py-4 pr-4">{entry.propertyName}</td>
                 <td className="py-4 pr-4">{formatDateLabel(entry.importedAt.slice(0, 10))}</td>
-                <td className="py-4 pr-4">{formatNumber(entry.bookingsCount)}</td>
-                <td className="py-4 pr-4">{formatNumber(entry.expensesCount)}</td>
+                <td className="py-4 pr-4">
+                  {entry.importedSource === "financial_statement"
+                    ? "Statement"
+                    : formatNumber(entry.bookingsCount)}
+                </td>
+                <td className="py-4 pr-4">
+                  {entry.importedSource === "financial_statement"
+                    ? "—"
+                    : formatNumber(entry.expensesCount)}
+                </td>
                 <td className="py-4">
                   <button
                     type="button"
@@ -126,7 +134,10 @@ export function ImportsManager({
         {importToDelete ? (
           <div className="space-y-5">
             <div className="workspace-soft-card rounded-[22px] p-4 text-sm leading-6 text-[var(--workspace-muted)]">
-              Deleting <span className="font-medium text-[var(--workspace-text)]">{importToDelete.fileName}</span> will remove the import from history and permanently delete the data that batch created inside Hostlyx.
+              Deleting <span className="font-medium text-[var(--workspace-text)]">{importToDelete.fileName}</span> will remove the import from history and permanently delete{" "}
+              {importToDelete.importedSource === "financial_statement"
+                ? "the financial statement saved by that batch."
+                : "the data that batch created inside Hostlyx."}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -137,13 +148,19 @@ export function ImportsManager({
                 </p>
               </div>
               <div className="workspace-soft-card rounded-2xl px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bookings to remove</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  {importToDelete.importedSource === "financial_statement" ? "Saved record" : "Bookings to remove"}
+                </p>
                 <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
-                  {formatNumber(importToDelete.bookingsCount)}
+                  {importToDelete.importedSource === "financial_statement"
+                    ? "1 statement"
+                    : formatNumber(importToDelete.bookingsCount)}
                 </p>
               </div>
               <div className="workspace-soft-card rounded-2xl px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Expenses to remove</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  {importToDelete.importedSource === "financial_statement" ? "Expenses to remove" : "Expenses to remove"}
+                </p>
                 <p className="mt-1 text-sm font-medium text-[var(--workspace-text)]">
                   {formatNumber(importToDelete.expensesCount)}
                 </p>
