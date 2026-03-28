@@ -33,13 +33,51 @@ export const airbnbBookingColumns = {
     "bookingreference",
     "reservationcode",
     "reservationid",
+    "codigodeconfirmacion",
+    "numerodeconfirmacion",
+    "codigodereserva",
   ],
-  guestName: ["guest", "guestname", "bookedby", "primaryguest", "name"],
-  propertyName: ["listing", "listingname", "listingtitle", "property", "propertyname"],
-  checkIn: ["checkin", "checkindate", "arrival", "arrivaldate"],
-  checkOut: ["checkout", "checkoutdate", "departure", "departuredate"],
+  guestName: [
+    "guest",
+    "guestname",
+    "bookedby",
+    "primaryguest",
+    "name",
+    "huesped",
+    "nombredelhuesped",
+    "huespedprincipal",
+    "reservadopor",
+  ],
+  propertyName: [
+    "listing",
+    "listingname",
+    "listingtitle",
+    "property",
+    "propertyname",
+    "anuncio",
+    "nombredelanuncio",
+    "alojamiento",
+  ],
+  checkIn: ["checkin", "checkindate", "arrival", "arrivaldate", "fechadeinicio", "fechaentrada"],
+  checkOut: [
+    "checkout",
+    "checkoutdate",
+    "departure",
+    "departuredate",
+    "fechadefinalizacion",
+    "fechadesalida",
+  ],
   nights: ["nights", "nightcount", "lengthofstay"],
-  payout: ["payout", "netpayout", "yourearnings", "hostpayout", "expectedpayout"],
+  payout: [
+    "payout",
+    "netpayout",
+    "yourearnings",
+    "hostpayout",
+    "expectedpayout",
+    "ganancias",
+    "ingresonetodelanfitrion",
+    "pagonetorecibido",
+  ],
   grossRevenue: [
     "grossrevenue",
     "grossbookingvalue",
@@ -48,12 +86,23 @@ export const airbnbBookingColumns = {
     "paidbyguest",
     "guestpaid",
     "reservationvalue",
+    "ingresobruto",
+    "importetotal",
+    "pagadoporelhuesped",
+    "valordelareserva",
   ],
-  platformFee: ["hostfee", "servicefee", "hostservicefee", "airbnbservicefee"],
-  cleaningFee: ["cleaningfee", "cleaning"],
-  guests: ["guests", "guestcount", "numberofguests"],
-  status: ["status", "reservationstatus"],
-  currency: ["currency", "currencycode"],
+  platformFee: [
+    "hostfee",
+    "servicefee",
+    "hostservicefee",
+    "airbnbservicefee",
+    "tarifadeservicio",
+    "comision",
+  ],
+  cleaningFee: ["cleaningfee", "cleaning", "tarifadelimpieza", "limpieza"],
+  guests: ["guests", "guestcount", "numberofguests", "numerodehuespedes"],
+  status: ["status", "reservationstatus", "estado"],
+  currency: ["currency", "currencycode", "moneda"],
 } as const;
 
 export const bookingComBookingColumns = {
@@ -100,6 +149,8 @@ export function normalizeHeader(value: ImportCellValue) {
   return String(value ?? "")
     .trim()
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "");
 }
 
