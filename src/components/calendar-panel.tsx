@@ -291,7 +291,7 @@ export function CalendarPanel({
       <div
         className={
           isYearGrid
-            ? "grid gap-6 xl:grid-cols-2 2xl:grid-cols-3"
+            ? "grid gap-6 xl:grid-cols-2"
             : showOverviewGrid
               ? "grid gap-6 xl:grid-cols-2"
               : "grid gap-6"
