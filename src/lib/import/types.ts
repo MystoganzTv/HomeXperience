@@ -1,16 +1,28 @@
-export type ImportDetectedSource = "airbnb" | "generic" | "unknown";
+export type ImportDetectedSource = "airbnb" | "booking" | "generic" | "unknown";
 
 export type ImportCellValue = string | number | boolean | Date | null | undefined;
 export type ImportSheetRow = ImportCellValue[];
 
 export type RawImportRow = Record<string, string | number | null>;
 
+export type ImportRowType = "booking" | "expense" | "file";
+
 export type ImportValidationWarning = {
+  rowType: ImportRowType;
+  rowIndex: number;
+  code: string;
+  message: string;
+  severity: "warning" | "error";
+};
+
+export type ImportDuplicateFlag = {
   rowType: "booking" | "expense" | "file";
   rowIndex: number;
   code: string;
   message: string;
-  severity: "warning" | "fatal";
+  severity: "warning";
+  matchType: "reference" | "fallback";
+  matchScope: "file" | "existing";
 };
 
 export type NormalizedImportBooking = {
@@ -43,10 +55,35 @@ export type NormalizedImportExpense = {
   rawRow: RawImportRow;
 };
 
+export type ImportBookingCandidate = {
+  rowIndex: number;
+  booking: NormalizedImportBooking;
+  warnings: ImportValidationWarning[];
+  duplicate?: ImportDuplicateFlag;
+};
+
+export type ImportExpenseCandidate = {
+  rowIndex: number;
+  expense: NormalizedImportExpense;
+  warnings: ImportValidationWarning[];
+};
+
 export type ImportPreviewRow = Pick<
   NormalizedImportBooking,
   "guestName" | "channel" | "checkIn" | "checkOut" | "grossRevenue" | "payout"
 >;
+
+export type ImportReviewSection = "valid" | "warnings" | "duplicates" | "errors";
+
+export type ImportReviewRow = {
+  id: string;
+  rowType: "booking" | "expense";
+  rowIndex: number;
+  section: ImportReviewSection;
+  title: string;
+  subtitle: string;
+  reasons: string[];
+};
 
 export type ImportPreview = {
   source: ImportDetectedSource;
@@ -55,13 +92,28 @@ export type ImportPreview = {
   totalRowsRead: number;
   validRows: number;
   warningRows: number;
+  duplicateRows: number;
+  errorRows: number;
   skippedRows: number;
   expensesDetected: number;
-  bookings: NormalizedImportBooking[];
-  expenses: NormalizedImportExpense[];
+  importableRows: number;
+  bookings: ImportBookingCandidate[];
+  expenses: ImportExpenseCandidate[];
   previewRows: ImportPreviewRow[];
+  reviewRows: Record<ImportReviewSection, ImportReviewRow[]>;
   warnings: ImportValidationWarning[];
+  duplicates: ImportDuplicateFlag[];
   canImport: boolean;
+};
+
+export type ImportNormalizationResult = {
+  source: ImportDetectedSource;
+  bookings: ImportBookingCandidate[];
+  expenses: ImportExpenseCandidate[];
+  warnings: ImportValidationWarning[];
+  duplicates: ImportDuplicateFlag[];
+  skippedRows: number;
+  totalRowsRead: number;
 };
 
 export type ParsedImportSheet = {
@@ -79,6 +131,8 @@ export function getDetectedSourceLabel(source: ImportDetectedSource) {
   switch (source) {
     case "airbnb":
       return "Airbnb";
+    case "booking":
+      return "Booking.com";
     case "generic":
       return "Generic Excel";
     default:

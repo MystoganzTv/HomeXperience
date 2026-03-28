@@ -1409,6 +1409,7 @@ export async function appendImportData({
   bookings,
   expenses,
   closures,
+  allowDuplicateBookings = false,
 }: {
   ownerEmail: string;
   fileName: string;
@@ -1419,6 +1420,7 @@ export async function appendImportData({
   bookings: BookingRecord[];
   expenses: ExpenseRecord[];
   closures: CalendarClosureRecord[];
+  allowDuplicateBookings?: boolean;
 }): Promise<ImportDataResult> {
   await ensureDatabase();
   const normalizedEmail = normalizeOwnerEmail(ownerEmail);
@@ -1500,15 +1502,17 @@ export async function appendImportData({
         ),
       );
 
-      const freshBookings = bookings.filter((booking) => {
-        const fingerprint = createBookingFingerprint(booking);
-        if (bookingFingerprints.has(fingerprint)) {
-          return false;
-        }
+      const freshBookings = allowDuplicateBookings
+        ? bookings
+        : bookings.filter((booking) => {
+            const fingerprint = createBookingFingerprint(booking);
+            if (bookingFingerprints.has(fingerprint)) {
+              return false;
+            }
 
-        bookingFingerprints.add(fingerprint);
-        return true;
-      });
+            bookingFingerprints.add(fingerprint);
+            return true;
+          });
       const freshExpenses = expenses.filter((expense) => {
         const fingerprint = createExpenseFingerprint(expense);
         if (expenseFingerprints.has(fingerprint)) {
@@ -1677,15 +1681,17 @@ export async function appendImportData({
         .map(createClosureFingerprint),
     );
 
-    const freshBookings = bookings.filter((booking) => {
-      const fingerprint = createBookingFingerprint(booking);
-      if (bookingFingerprints.has(fingerprint)) {
-        return false;
-      }
+    const freshBookings = allowDuplicateBookings
+      ? bookings
+      : bookings.filter((booking) => {
+          const fingerprint = createBookingFingerprint(booking);
+          if (bookingFingerprints.has(fingerprint)) {
+            return false;
+          }
 
-      bookingFingerprints.add(fingerprint);
-      return true;
-    });
+          bookingFingerprints.add(fingerprint);
+          return true;
+        });
     const freshExpenses = expenses.filter((expense) => {
       const fingerprint = createExpenseFingerprint(expense);
       if (expenseFingerprints.has(fingerprint)) {
@@ -1831,15 +1837,17 @@ export async function appendImportData({
     const bookingFingerprints = new Set(existingBookings.map(createBookingFingerprint));
     const expenseFingerprints = new Set(existingExpenses.map(createExpenseFingerprint));
     const closureFingerprints = new Set(existingClosures.map(createClosureFingerprint));
-    const freshBookings = bookings.filter((booking) => {
-      const fingerprint = createBookingFingerprint(booking);
-      if (bookingFingerprints.has(fingerprint)) {
-        return false;
-      }
+    const freshBookings = allowDuplicateBookings
+      ? bookings
+      : bookings.filter((booking) => {
+          const fingerprint = createBookingFingerprint(booking);
+          if (bookingFingerprints.has(fingerprint)) {
+            return false;
+          }
 
-      bookingFingerprints.add(fingerprint);
-      return true;
-    });
+          bookingFingerprints.add(fingerprint);
+          return true;
+        });
     const freshExpenses = expenses.filter((expense) => {
       const fingerprint = createExpenseFingerprint(expense);
       if (expenseFingerprints.has(fingerprint)) {
@@ -2369,6 +2377,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           id,
           import_id AS importId,
           source,
+          imported_source AS importedSource,
           property_name AS propertyName,
           unit_name AS unitName,
           check_in AS checkIn,
@@ -2415,6 +2424,7 @@ export async function getBookings(ownerEmail: string): Promise<BookingRecord[]> 
           id,
           import_id AS importId,
           source,
+          imported_source AS importedSource,
           property_name AS propertyName,
           unit_name AS unitName,
           check_in AS checkIn,

@@ -1,5 +1,6 @@
 import {
   airbnbBookingColumns,
+  bookingComBookingColumns,
   findHeaderRowIndex,
   genericBookingColumns,
   genericExpenseColumns,
@@ -40,6 +41,26 @@ export function detectSource(workbook: ParsedImportWorkbook): ImportDetectedSour
           typeof indexes.payout === "number")
       ) {
         return "airbnb";
+      }
+
+      const bookingIndexes = mapOptionalColumns(row, bookingComBookingColumns);
+      const bookingMatches = Object.keys(bookingIndexes).length;
+      const hasBookingSpecificHeader = normalizedHeaders.some((header) =>
+        ["reservationnumber", "commission", "accommodation", "arrival", "departure"].includes(header),
+      );
+
+      if (
+        bookingMatches >= 4 &&
+        typeof bookingIndexes.checkIn === "number" &&
+        typeof bookingIndexes.checkOut === "number" &&
+        (typeof bookingIndexes.bookingReference === "number" ||
+          typeof bookingIndexes.guestName === "number") &&
+        (typeof bookingIndexes.payout === "number" ||
+          typeof bookingIndexes.grossRevenue === "number" ||
+          typeof bookingIndexes.platformFee === "number") &&
+        hasBookingSpecificHeader
+      ) {
+        return "booking";
       }
     }
   }

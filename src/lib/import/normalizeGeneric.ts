@@ -9,17 +9,20 @@ import {
   rowIsEmpty,
   toRawRow,
 } from "./columnMatchers";
-import { calculateNights, parseImportDate, parseNights } from "./dates";
+import { calculateNights, parseImportDateDetailed, parseNights } from "./dates";
 import { inferCurrency, parseMoney } from "./money";
-import { hasFatalWarnings, validateBookingRow, validateExpenseRow } from "./validators";
+import { validateBookingRow, validateExpenseRow } from "./validators";
 import type {
+  ImportBookingCandidate,
+  ImportExpenseCandidate,
+  ImportNormalizationResult,
   ImportValidationWarning,
   NormalizedImportBooking,
   NormalizedImportExpense,
   ParsedImportWorkbook,
 } from "./types";
 
-export function normalizeGeneric(workbook: ParsedImportWorkbook) {
+export function normalizeGeneric(workbook: ParsedImportWorkbook): ImportNormalizationResult {
   const bookingsSheet = workbook.sheets.find((sheet) => sheet.normalizedName === "bookings");
   const expensesSheet = workbook.sheets.find((sheet) => sheet.normalizedName === "expenses");
 
@@ -58,10 +61,8 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook) {
   const expenseOptional = mapOptionalColumns(expenseHeaders, genericExpenseColumns);
 
   const warnings: ImportValidationWarning[] = [];
-  const bookings: NormalizedImportBooking[] = [];
-  const expenses: NormalizedImportExpense[] = [];
-  let skippedRows = 0;
-  let warningRows = 0;
+  const bookings: ImportBookingCandidate[] = [];
+  const expenses: ImportExpenseCandidate[] = [];
 
   bookingsSheet.rows
     .slice(bookingHeaderRowIndex + 1)
@@ -72,19 +73,19 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook) {
       const payoutMoney = parseMoney(getCell(row, bookingOptional.payout));
       const feeMoney = parseMoney(getCell(row, bookingOptional.hostFee));
       const cleaningMoney = parseMoney(getCell(row, bookingOptional.cleaningFee));
-      const checkIn = parseImportDate(getCell(row, bookingIndexes.checkIn));
-      const checkOut = parseImportDate(getCell(row, bookingIndexes.checkOut));
+      const checkInMeta = parseImportDateDetailed(getCell(row, bookingIndexes.checkIn));
+      const checkOutMeta = parseImportDateDetailed(getCell(row, bookingIndexes.checkOut));
       const derivedNights =
         parseNights(getCell(row, bookingOptional.rentalPeriod)) ||
-        calculateNights(checkIn, checkOut);
+        calculateNights(checkInMeta.value, checkOutMeta.value);
       const booking: NormalizedImportBooking = {
         source: "generic",
         propertyName: String(getCell(row, bookingOptional.propertyName) ?? "").trim(),
         bookingReference: String(getCell(row, bookingOptional.bookingReference) ?? "").trim(),
         guestName: String(getCell(row, bookingIndexes.guestName) ?? "").trim(),
         channel: String(getCell(row, bookingOptional.channel) ?? "").trim() || "Direct",
-        checkIn,
-        checkOut,
+        checkIn: checkInMeta.value,
+        checkOut: checkOutMeta.value,
         nights: derivedNights,
         guests: Number(String(getCell(row, bookingOptional.guests) ?? "").replace(/[^\d]/g, "")) || 0,
         grossRevenue: grossMoney.value,
@@ -104,26 +105,30 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook) {
       const rowWarnings = validateBookingRow({
         booking,
         rowIndex,
-        malformedFields: [
+        malformedRequiredMoneyFields: [
           grossMoney.malformed ? "gross revenue" : "",
           payoutMoney.malformed ? "payout" : "",
+        ].filter(Boolean),
+        malformedOptionalMoneyFields: [
           feeMoney.malformed ? "platform fee" : "",
           cleaningMoney.malformed ? "cleaning fee" : "",
+        ].filter(Boolean),
+        ambiguousDateFields: [
+          checkInMeta.ambiguous ? "check-in" : "",
+          checkOutMeta.ambiguous ? "check-out" : "",
+        ].filter(Boolean),
+        malformedDateFields: [
+          checkInMeta.malformed ? "check-in" : "",
+          checkOutMeta.malformed ? "check-out" : "",
         ].filter(Boolean),
       });
 
       warnings.push(...rowWarnings);
-
-      if (hasFatalWarnings(rowWarnings)) {
-        skippedRows += 1;
-        return;
-      }
-
-      if (rowWarnings.length > 0) {
-        warningRows += 1;
-      }
-
-      bookings.push(booking);
+      bookings.push({
+        rowIndex,
+        booking,
+        warnings: rowWarnings,
+      });
     });
 
   expensesSheet.rows
@@ -136,34 +141,40 @@ export function normalizeGeneric(workbook: ParsedImportWorkbook) {
         descriptionValue: getCell(row, expenseIndexes.description),
         noteValue: getCell(row, expenseIndexes.note),
       });
+      const expenseDateMeta = parseImportDateDetailed(getCell(row, expenseIndexes.date));
+      const amountMeta = parseMoney(getCell(row, expenseIndexes.amount));
       const expense: NormalizedImportExpense = {
         source: "generic",
         propertyName: String(getCell(row, expenseOptional.propertyName) ?? "").trim(),
-        date: parseImportDate(getCell(row, expenseIndexes.date)),
+        date: expenseDateMeta.value,
         category: String(getCell(row, expenseIndexes.category) ?? "").trim() || "Other",
         description: normalizedExpenseFields.description,
         note: normalizedExpenseFields.note,
-        amount: normalizedExpenseFields.amount,
+        amount: amountMeta.malformed ? normalizedExpenseFields.amount : amountMeta.value,
         rawRow: toRawRow(expenseHeaders, row),
       };
 
-      const rowWarnings = validateExpenseRow({ expense, rowIndex });
+      const rowWarnings = validateExpenseRow({
+        expense,
+        rowIndex,
+        malformedAmount: amountMeta.malformed,
+        malformedDate: expenseDateMeta.malformed,
+      });
       warnings.push(...rowWarnings);
-
-      if (hasFatalWarnings(rowWarnings)) {
-        skippedRows += 1;
-        return;
-      }
-
-      expenses.push(expense);
+      expenses.push({
+        rowIndex,
+        expense,
+        warnings: rowWarnings,
+      });
     });
 
   return {
+    source: "generic",
     bookings,
     expenses,
     warnings,
-    warningRows,
-    skippedRows,
+    duplicates: [],
+    skippedRows: 0,
     totalRowsRead:
       bookingsSheet.rows.slice(bookingHeaderRowIndex + 1).filter((row) => !rowIsEmpty(row)).length +
       expensesSheet.rows.slice(expenseHeaderRowIndex + 1).filter((row) => !rowIsEmpty(row)).length,

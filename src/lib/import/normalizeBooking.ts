@@ -1,5 +1,5 @@
 import {
-  airbnbBookingColumns,
+  bookingComBookingColumns,
   getCell,
   mapOptionalColumns,
   rowIsEmpty,
@@ -21,24 +21,25 @@ import type {
   ParsedImportWorkbook,
 } from "./types";
 
-type AirbnbColumnKey = keyof typeof airbnbBookingColumns;
+type BookingComColumnKey = keyof typeof bookingComBookingColumns;
 
-export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormalizationResult {
+export function normalizeBooking(workbook: ParsedImportWorkbook): ImportNormalizationResult {
   let selectedSheet = workbook.sheets[0];
   let selectedHeaderRowIndex = -1;
-  let selectedIndexes: Partial<Record<AirbnbColumnKey, number>> | null = null;
+  let selectedIndexes: Partial<Record<BookingComColumnKey, number>> | null = null;
 
   for (const sheet of workbook.sheets) {
     for (let rowIndex = 0; rowIndex < Math.min(sheet.rows.length, 10); rowIndex += 1) {
       const row = sheet.rows[rowIndex];
-      const indexes = mapOptionalColumns(row, airbnbBookingColumns);
+      const indexes = mapOptionalColumns(row, bookingComBookingColumns);
 
       if (
         typeof indexes.checkIn === "number" &&
-        (typeof indexes.checkOut === "number" || typeof indexes.nights === "number") &&
-        (typeof indexes.bookingReference === "number" ||
-          typeof indexes.guestName === "number" ||
-          typeof indexes.payout === "number")
+        typeof indexes.checkOut === "number" &&
+        (typeof indexes.bookingReference === "number" || typeof indexes.guestName === "number") &&
+        (typeof indexes.payout === "number" ||
+          typeof indexes.grossRevenue === "number" ||
+          typeof indexes.platformFee === "number")
       ) {
         selectedSheet = sheet;
         selectedHeaderRowIndex = rowIndex;
@@ -53,7 +54,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
   }
 
   if (selectedHeaderRowIndex < 0 || !selectedIndexes) {
-    throw new Error("Hostlyx could not find recognizable Airbnb columns in this file.");
+    throw new Error("Hostlyx could not find recognizable Booking.com columns in this file.");
   }
 
   const headers = selectedSheet.rows[selectedHeaderRowIndex];
@@ -81,24 +82,28 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
         };
       }
 
+      const grossRevenue = grossMoney.value > 0 ? grossMoney.value : Math.max(0, payoutMoney.value);
+      const platformFee = Math.max(0, Math.abs(feeMoney.value));
+      const payout =
+        payoutMoney.value > 0
+          ? payoutMoney.value
+          : Math.max(0, grossRevenue - platformFee);
       const nights = explicitNights || calculateNights(checkInMeta.value, checkOutMeta.value);
+
       const booking: NormalizedImportBooking = {
-        source: "airbnb",
+        source: "booking",
         propertyName: String(getCell(row, selectedIndexes.propertyName) ?? "").trim(),
         bookingReference: String(getCell(row, selectedIndexes.bookingReference) ?? "").trim(),
         guestName: String(getCell(row, selectedIndexes.guestName) ?? "").trim(),
-        channel: "Airbnb",
+        channel: "Booking.com",
         checkIn: checkInMeta.value,
         checkOut: checkOutMeta.value,
         nights,
         guests: Number(String(getCell(row, selectedIndexes.guests) ?? "").replace(/[^\d]/g, "")) || 0,
-        grossRevenue:
-          grossMoney.value > 0
-            ? grossMoney.value
-            : Math.max(0, payoutMoney.value + Math.max(0, feeMoney.value)),
-        platformFee: Math.max(0, feeMoney.value),
+        grossRevenue,
+        platformFee,
         cleaningFee: Math.max(0, cleaningMoney.value),
-        payout: payoutMoney.value,
+        payout,
         currency: inferCurrency(
           String(getCell(row, selectedIndexes.currency) ?? "").trim(),
           grossMoney.currency,
@@ -115,7 +120,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
         rowIndex,
         malformedRequiredMoneyFields: [
           grossMoney.malformed ? "gross revenue" : "",
-          payoutMoney.malformed ? "payout" : "",
+          payoutMoney.malformed && typeof selectedIndexes.payout === "number" ? "payout" : "",
         ].filter(Boolean),
         malformedOptionalMoneyFields: [
           feeMoney.malformed ? "platform fee" : "",
@@ -140,7 +145,7 @@ export function normalizeAirbnb(workbook: ParsedImportWorkbook): ImportNormaliza
     });
 
   return {
-    source: "airbnb",
+    source: "booking",
     bookings,
     expenses: [],
     warnings,

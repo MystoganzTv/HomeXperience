@@ -21,7 +21,17 @@ type PreviewWarning = {
   rowIndex: number;
   code: string;
   message: string;
-  severity: "warning" | "fatal";
+  severity: "warning" | "error";
+};
+
+type PreviewDuplicate = {
+  rowType: "booking";
+  rowIndex: number;
+  code: string;
+  message: string;
+  severity: "warning";
+  matchType: "reference" | "fallback";
+  matchScope: "file" | "existing";
 };
 
 type PreviewRow = {
@@ -33,17 +43,34 @@ type PreviewRow = {
   payout: number;
 };
 
+type ReviewSection = "valid" | "warnings" | "duplicates" | "errors";
+
+type ReviewRow = {
+  id: string;
+  rowType: "booking" | "expense";
+  rowIndex: number;
+  section: ReviewSection;
+  title: string;
+  subtitle: string;
+  reasons: string[];
+};
+
 type ImportPreviewPayload = {
-  source: "airbnb" | "generic" | "unknown";
+  source: "airbnb" | "booking" | "generic" | "unknown";
   sourceLabel: string;
   fileName: string;
   totalRowsRead: number;
   validRows: number;
   warningRows: number;
+  duplicateRows: number;
+  errorRows: number;
   skippedRows: number;
   expensesDetected: number;
+  importableRows: number;
   previewRows: PreviewRow[];
+  reviewRows: Record<ReviewSection, ReviewRow[]>;
   warnings: PreviewWarning[];
+  duplicates: PreviewDuplicate[];
   canImport: boolean;
 };
 
@@ -96,7 +123,7 @@ async function parseResponse(response: Response) {
 export function UploadPanel({
   properties,
   title = "Import Center",
-  subtitle = "Upload an Airbnb CSV/XLSX export or your generic Hostlyx workbook. Hostlyx will show a clean preview and validation step before saving anything.",
+  subtitle = "Upload an Airbnb export, a Booking.com export, or your generic Hostlyx workbook. Hostlyx will preview, validate, and review the data before saving anything.",
   refreshOnSuccess = true,
   onImportComplete,
 }: {
@@ -112,20 +139,36 @@ export function UploadPanel({
   const [selectedPropertyName, setSelectedPropertyName] = useState(properties[0]?.name ?? "");
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
+  const [reviewSection, setReviewSection] = useState<ReviewSection>("valid");
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "import">("skip");
   const [toast, setToast] = useState<UploadToast | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const warningSummary = useMemo(() => {
+  const currentReviewRows = useMemo(() => {
     if (!preview) {
       return [];
     }
 
-    return preview.warnings.slice(0, 6);
-  }, [preview]);
+    return preview.reviewRows[reviewSection].slice(0, 6);
+  }, [preview, reviewSection]);
+
+  const actionableRows = useMemo(() => {
+    if (!preview) {
+      return 0;
+    }
+
+    return (
+      preview.validRows +
+      preview.warningRows +
+      (duplicateStrategy === "import" ? preview.duplicateRows : 0)
+    );
+  }, [duplicateStrategy, preview]);
 
   function resetSelection(nextFile: File | null) {
     setSelectedFile(nextFile);
     setPreview(null);
+    setReviewSection("valid");
+    setDuplicateStrategy("skip");
     setToast(null);
     setPhase(nextFile ? "idle" : "idle");
     if (inputRef.current && !nextFile) {
@@ -137,7 +180,7 @@ export function UploadPanel({
     if (!selectedFile) {
       setToast({
         tone: "error",
-        message: "Choose an Airbnb or Hostlyx file before previewing the import.",
+        message: "Choose an Airbnb, Booking.com, or Hostlyx file before previewing the import.",
       });
       return;
     }
@@ -161,6 +204,16 @@ export function UploadPanel({
       }
 
       setPreview(payload.preview);
+      setDuplicateStrategy("skip");
+      setReviewSection(
+        payload.preview.errorRows > 0
+          ? "errors"
+          : payload.preview.duplicateRows > 0
+            ? "duplicates"
+            : payload.preview.warningRows > 0
+              ? "warnings"
+              : "valid",
+      );
       setPhase("ready");
     } catch (error) {
       setPhase("idle");
@@ -172,7 +225,7 @@ export function UploadPanel({
   }
 
   async function handleImport() {
-    if (!selectedFile || !preview?.canImport) {
+    if (!selectedFile || !preview?.canImport || actionableRows <= 0) {
       return;
     }
 
@@ -183,6 +236,7 @@ export function UploadPanel({
       const formData = new FormData();
       formData.set("action", "commit");
       formData.set("propertyName", selectedPropertyName);
+      formData.set("duplicateStrategy", duplicateStrategy);
       formData.append("file", selectedFile);
 
       const response = await fetch("/api/import", {
@@ -351,7 +405,7 @@ export function UploadPanel({
                 <p className="mt-1 text-sm text-[var(--workspace-muted)]">
                   {selectedFile
                     ? `${formatFileSize(selectedFile.size)} • Preview before saving`
-                    : "Supported: Airbnb CSV/XLSX and the generic Hostlyx Excel format."}
+                    : "Supported: Airbnb CSV/XLSX, Booking.com CSV/XLSX, and the generic Hostlyx Excel format."}
                 </p>
               </div>
 
@@ -397,7 +451,7 @@ export function UploadPanel({
               <button
                 type="button"
                 onClick={handleImport}
-                disabled={!preview.canImport || phase === "importing" || phase === "previewing"}
+                disabled={actionableRows <= 0 || phase === "importing" || phase === "previewing"}
                 className="workspace-button-secondary inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {phase === "importing" ? (
@@ -405,7 +459,7 @@ export function UploadPanel({
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Saving import...
                   </>
-                ) : preview.canImport ? (
+                ) : actionableRows > 0 ? (
                   "Confirm import"
                 ) : (
                   "Fix file before importing"
@@ -427,12 +481,14 @@ export function UploadPanel({
                 </div>
                 <span
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    preview.canImport
+                    preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
                       ? "border-emerald-400/24 bg-emerald-400/10 text-emerald-100"
                       : "border-amber-400/24 bg-amber-400/10 text-amber-100"
                   }`}
                 >
-                  {preview.canImport ? "Ready to import" : "Needs review"}
+                  {preview.errorRows === 0 && preview.duplicateRows === 0 && preview.warningRows === 0
+                    ? "Ready to import"
+                    : "Needs review"}
                 </span>
               </div>
 
@@ -441,6 +497,8 @@ export function UploadPanel({
                   ["Rows read", preview.totalRowsRead],
                   ["Valid rows", preview.validRows],
                   ["Warning rows", preview.warningRows],
+                  ["Duplicate rows", preview.duplicateRows],
+                  ["Error rows", preview.errorRows],
                   ["Skipped rows", preview.skippedRows],
                   ["Expenses", preview.expensesDetected],
                 ].map(([label, value]) => (
@@ -457,6 +515,47 @@ export function UploadPanel({
                   </div>
                 ))}
               </div>
+
+              {preview.duplicateRows > 0 ? (
+                <div className="mt-5 rounded-[20px] border border-amber-400/20 bg-amber-300/[0.08] p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-100">
+                        Duplicate review
+                      </p>
+                      <p className="mt-1 text-xs leading-6 text-amber-50/80">
+                        Hostlyx found {preview.duplicateRows} booking
+                        {preview.duplicateRows === 1 ? "" : "s"} that look already imported or repeated in this
+                        file.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateStrategy("skip")}
+                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                          duplicateStrategy === "skip"
+                            ? "workspace-button-primary"
+                            : "workspace-button-secondary"
+                        }`}
+                      >
+                        Skip duplicates
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateStrategy("import")}
+                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                          duplicateStrategy === "import"
+                            ? "workspace-button-primary"
+                            : "workspace-button-secondary"
+                        }`}
+                      >
+                        Review and import duplicates
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-5 grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
                 <div className="rounded-[20px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
@@ -509,35 +608,64 @@ export function UploadPanel({
                 </div>
 
                 <div className="rounded-[20px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
-                  <p className="text-sm font-medium text-[var(--workspace-text)]">
-                    Validation
-                  </p>
+                  <p className="text-sm font-medium text-[var(--workspace-text)]">Review</p>
                   <p className="mt-1 text-xs text-[var(--workspace-muted)]">
-                    Hostlyx flags issues before saving, but not every warning blocks the import.
+                    Hostlyx separates clean rows from issues so you can decide quickly.
                   </p>
 
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {([
+                      ["valid", "Valid", preview.validRows],
+                      ["warnings", "Warnings", preview.warningRows],
+                      ["duplicates", "Duplicates", preview.duplicateRows],
+                      ["errors", "Errors", preview.errorRows],
+                    ] as Array<[ReviewSection, string, number]>).map(([section, label, count]) => (
+                      <button
+                        key={section}
+                        type="button"
+                        onClick={() => setReviewSection(section)}
+                        className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
+                          reviewSection === section
+                            ? "border-[var(--workspace-accent)] bg-[rgba(125,211,197,0.12)] text-[var(--workspace-text)]"
+                            : "border-[var(--workspace-border)] bg-white/[0.02] text-[var(--workspace-muted)]"
+                        }`}
+                      >
+                        {label} · {count}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="mt-4 space-y-3">
-                    {warningSummary.length > 0 ? (
-                      warningSummary.map((warning) => (
+                    {currentReviewRows.length > 0 ? (
+                      currentReviewRows.map((row) => (
                         <div
-                          key={`${warning.code}-${warning.rowType}-${warning.rowIndex}`}
+                          key={row.id}
                           className={`rounded-[16px] border px-3 py-3 text-sm ${
-                            warning.severity === "fatal"
-                              ? "border-amber-400/20 bg-amber-300/[0.08] text-amber-50/90"
-                              : "border-[var(--workspace-border)] bg-white/[0.03] text-[var(--workspace-text)]"
+                            row.section === "errors"
+                              ? "border-rose-400/18 bg-rose-300/[0.07] text-rose-50/90"
+                              : row.section === "duplicates"
+                                ? "border-amber-400/18 bg-amber-300/[0.07] text-amber-50/90"
+                                : row.section === "warnings"
+                                  ? "border-[var(--workspace-border)] bg-white/[0.03] text-[var(--workspace-text)]"
+                                  : "border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-50/90"
                           }`}
                         >
-                          <p className="font-medium">
-                            {warning.rowType === "file"
-                              ? "File issue"
-                              : `${warning.rowType === "booking" ? "Booking" : "Expense"} row ${warning.rowIndex}`}
+                          <p className="font-medium">{row.title}</p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] opacity-70">
+                            {row.subtitle}
                           </p>
-                          <p className="mt-1 text-sm opacity-85">{warning.message}</p>
+                          <div className="mt-2 space-y-1">
+                            {row.reasons.slice(0, 2).map((reason) => (
+                              <p key={reason} className="text-sm opacity-85">
+                                {reason}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-[16px] border border-emerald-400/20 bg-emerald-400/10 px-3 py-3 text-sm text-emerald-100">
-                        This preview looks clean. No warnings were found.
+                      <div className="rounded-[16px] border border-[var(--workspace-border)] bg-white/[0.03] px-3 py-3 text-sm text-[var(--workspace-muted)]">
+                        Nothing is flagged in this section.
                       </div>
                     )}
                   </div>

@@ -32,6 +32,14 @@ export function parseMoney(value: ImportCellValue) {
   const negative = raw.startsWith("(") && raw.endsWith(")");
   let cleaned = raw.replace(/[^\d,.-]/g, "");
 
+  if (!cleaned) {
+    return {
+      value: 0,
+      malformed: true,
+      currency,
+    };
+  }
+
   if (cleaned.includes(",") && cleaned.includes(".")) {
     cleaned =
       cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")

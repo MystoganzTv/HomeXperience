@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireUserEmail } from "@/lib/auth";
-import { appendImportData, getPropertyDefinitions } from "@/lib/db";
+import { appendImportData, getBookings, getPropertyDefinitions } from "@/lib/db";
 import { buildImportPreview, mapPreviewToHostlyxRecords } from "@/lib/import/importPipeline";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     if (!(fileValue instanceof File) || fileValue.size <= 0) {
       return NextResponse.json(
-        { error: "Attach a valid Airbnb or Hostlyx file first." },
+        { error: "Attach a valid Airbnb, Booking.com, or Hostlyx file first." },
         { status: 400 },
       );
     }
@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     }
 
     const buffer = await fileValue.arrayBuffer();
-    const preview = buildImportPreview(buffer, fileValue.name);
+    const existingBookings = await getBookings(ownerEmail);
+    const preview = buildImportPreview(buffer, fileValue.name, existingBookings);
 
     if (action !== "commit") {
       return NextResponse.json({
@@ -44,10 +45,15 @@ export async function POST(request: Request) {
           totalRowsRead: preview.totalRowsRead,
           validRows: preview.validRows,
           warningRows: preview.warningRows,
+          duplicateRows: preview.duplicateRows,
+          errorRows: preview.errorRows,
           skippedRows: preview.skippedRows,
           expensesDetected: preview.expensesDetected,
+          importableRows: preview.importableRows,
           previewRows: preview.previewRows,
+          reviewRows: preview.reviewRows,
           warnings: preview.warnings,
+          duplicates: preview.duplicates,
           canImport: preview.canImport,
         },
       });
@@ -59,6 +65,11 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const duplicateStrategy =
+      String(formData.get("duplicateStrategy") ?? "skip").trim().toLowerCase() === "import"
+        ? "import"
+        : "skip";
 
     const propertyDefinitions = await getPropertyDefinitions(ownerEmail);
 
@@ -87,7 +98,22 @@ export async function POST(request: Request) {
     const workbookHash = createHash("sha256")
       .update(Buffer.from(buffer))
       .digest("hex");
-    const mapped = mapPreviewToHostlyxRecords(preview, targetPropertyName);
+    const mapped = mapPreviewToHostlyxRecords(preview, targetPropertyName, {
+      duplicateStrategy,
+    });
+
+    if (mapped.bookings.length === 0 && mapped.expenses.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            duplicateStrategy === "skip"
+              ? "Everything in this file is currently blocked or marked as duplicate. Review the preview or allow duplicates before importing."
+              : "This file still needs attention before Hostlyx can import it.",
+        },
+        { status: 400 },
+      );
+    }
+
     const result = await appendImportData({
       ownerEmail,
       fileName: fileValue.name,
@@ -98,6 +124,7 @@ export async function POST(request: Request) {
       bookings: mapped.bookings,
       expenses: mapped.expenses,
       closures: [],
+      allowDuplicateBookings: duplicateStrategy === "import",
     });
 
     return NextResponse.json({
@@ -107,7 +134,7 @@ export async function POST(request: Request) {
         sourceLabel: preview.sourceLabel,
         bookingsImported: result.bookingsCount,
         expensesImported: result.expensesCount,
-        skippedRows: preview.skippedRows,
+        skippedRows: preview.skippedRows + (duplicateStrategy === "skip" ? preview.duplicateRows : 0),
       },
     });
   } catch (error) {

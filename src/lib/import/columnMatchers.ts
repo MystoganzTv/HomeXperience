@@ -56,6 +56,46 @@ export const airbnbBookingColumns = {
   currency: ["currency", "currencycode"],
 } as const;
 
+export const bookingComBookingColumns = {
+  bookingReference: [
+    "reservationnumber",
+    "reservationno",
+    "reservationid",
+    "reservation",
+    "bookingnumber",
+    "bookingreference",
+    "confirmationnumber",
+  ],
+  guestName: ["guestname", "guest", "bookername", "customername", "name"],
+  propertyName: [
+    "accommodation",
+    "accommodationname",
+    "property",
+    "propertyname",
+    "hotel",
+    "hotelname",
+    "listing",
+    "listingname",
+  ],
+  checkIn: ["arrival", "arrivaldate", "checkin", "checkindate"],
+  checkOut: ["departure", "departuredate", "checkout", "checkoutdate"],
+  nights: ["nights", "nightcount", "lengthofstay", "staylength"],
+  payout: ["payout", "netpayout", "payableamount", "amounttopayout", "netamount"],
+  grossRevenue: [
+    "grossrevenue",
+    "reservationamount",
+    "bookingvalue",
+    "totalprice",
+    "price",
+    "amount",
+  ],
+  platformFee: ["commission", "commissionamount", "platformfee", "bookingcommission"],
+  cleaningFee: ["cleaningfee", "cleaning", "cleaningcharge"],
+  guests: ["guests", "guestcount", "numberofguests", "occupancy"],
+  status: ["status", "reservationstatus", "bookingstatus"],
+  currency: ["currency", "currencycode"],
+} as const;
+
 export function normalizeHeader(value: ImportCellValue) {
   return String(value ?? "")
     .trim()
@@ -75,7 +115,11 @@ export function mapOptionalColumns<T extends string>(
   const indexes: Partial<Record<T, number>> = {};
 
   for (const [key, aliases] of Object.entries(columns) as Array<[T, readonly string[]]>) {
-    const index = normalizedHeaders.findIndex((header) => aliases.includes(header));
+    const index = normalizedHeaders.findIndex(
+      (header) =>
+        aliases.includes(header) ||
+        aliases.some((alias) => header.includes(alias) || alias.includes(header)),
+    );
     if (index >= 0) {
       indexes[key] = index;
     }
@@ -92,7 +136,11 @@ export function mapRequiredColumns<T extends string>(
 
   return Object.fromEntries(
     (Object.entries(columns) as Array<[T, readonly string[]]>).map(([key, aliases]) => {
-      const index = normalizedHeaders.findIndex((header) => aliases.includes(header));
+      const index = normalizedHeaders.findIndex(
+        (header) =>
+          aliases.includes(header) ||
+          aliases.some((alias) => header.includes(alias) || alias.includes(header)),
+      );
       if (index < 0) {
         throw new Error(`Missing required column: ${key}`);
       }
